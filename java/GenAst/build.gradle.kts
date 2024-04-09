@@ -34,11 +34,8 @@ java {
 
 application {
     // Define the main class for the application.
-    mainClass = "com.craftinginterpreters.lox.Lox"
-}
+    mainClass = "com.craftinginterpreters.tool.GenerateAst"
 
-val run by tasks.getting(JavaExec::class) {
-   standardInput = System.`in`
 }
 
 tasks.named<Test>("test") {
