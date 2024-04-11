@@ -48,7 +48,6 @@ public class Parser {
     return expr;
   }
 
-  // TODO: check with book from this point
   private Expr term() {
     Expr expr = factor();
     while (match(MINUS, PLUS)) {
