@@ -3,6 +3,7 @@ package com.craftinginterpreters.lox;
 import static com.craftinginterpreters.lox.TokenType.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Parser {
@@ -48,8 +49,17 @@ public class Parser {
   }
 
   private Stmt statement() {
+    if (match(FOR)) {
+      return forStatement();
+    }
+    if (match(IF)) {
+      return ifStatement();
+    }
     if (match(PRINT)) {
       return printStatement();
+    }
+    if (match(WHILE)) {
+      return whileStatement();
     }
     if (match(LEFT_BRACE)) {
       return new Stmt.Block(block());
@@ -58,10 +68,73 @@ public class Parser {
     return expressionStatement();
   }
 
+  private Stmt forStatement() {
+    consume(LEFT_PAREN, "Expect '(' after for");
+    Stmt initializer;
+    if (match(SEMICOLON)) {
+      initializer = null;
+    } else if (match(VAR)) {
+      initializer = varDeclaration();
+    } else {
+      initializer = expressionStatement();
+    }
+
+    Expr condition = null;
+    if (!check(SEMICOLON)) {
+      condition = expression();
+    }
+    consume(SEMICOLON, "Expect ';' after loop condition.");
+
+    Expr increment = null;
+    if (!check(RIGHT_PAREN)) {
+      increment = expression();
+    }
+    consume(RIGHT_PAREN, "Expect ')' after for clauses.");
+
+    Stmt body = statement();
+
+    if (increment != null) {
+      body = new Stmt.Block(Arrays.asList(body, new Stmt.Expression(increment)));
+    }
+
+    if (condition != null) {
+      body = new Stmt.While(condition, body);
+    }
+
+    if (initializer != null) {
+      body = new Stmt.Block(Arrays.asList(initializer, body));
+    }
+
+    return body;
+  }
+
+  private Stmt ifStatement() {
+    consume(LEFT_PAREN, "Expect '(' after if.");
+    Expr condition = expression();
+    consume(RIGHT_PAREN, "Expect ')' after if condition.");
+
+    Stmt thenBranch = statement();
+    Stmt elseBranch = null;
+    if (match(ELSE)) {
+      elseBranch = statement();
+    }
+    return new Stmt.If(condition, thenBranch, elseBranch);
+  }
+
   private Stmt printStatement() {
     Expr value = expression();
     consume(SEMICOLON, "Expect ';' after value.");
     return new Stmt.Print(value);
+  }
+
+  private Stmt whileStatement() {
+    consume(LEFT_PAREN, "Expect '(' after while.");
+    Expr condition = expression();
+
+    consume(RIGHT_PAREN, "Expect ')' after while condition.");
+    Stmt body = statement();
+
+    return new Stmt.While(condition, body);
   }
 
   private Stmt expressionStatement() {
@@ -86,7 +159,7 @@ public class Parser {
   }
 
   private Expr assignment() {
-    Expr expr = equality();
+    Expr expr = or();
 
     if (match(EQUAL)) {
       Token equals = previous();
@@ -98,6 +171,30 @@ public class Parser {
       }
 
       error(equals, "Invalid assignment target");
+    }
+
+    return expr;
+  }
+
+  private Expr or() {
+    Expr expr = and();
+
+    if (match(OR)) {
+      Token operator = previous();
+      Expr right = and();
+      expr = new Expr.Logical(expr, operator, right);
+    }
+
+    return expr;
+  }
+
+  private Expr and() {
+    Expr expr = equality();
+
+    if (match(AND)) {
+      Token operator = previous();
+      Expr right = equality();
+      expr = new Expr.Logical(expr, operator, right);
     }
 
     return expr;
