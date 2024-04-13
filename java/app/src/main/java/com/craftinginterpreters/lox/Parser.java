@@ -157,6 +157,7 @@ public class Parser {
     if (!check(SEMICOLON)) {
       value = expression();
     }
+
     consume(SEMICOLON, "Expect ';' after value.");
     return new Stmt.Return(keyword, value);
   }
