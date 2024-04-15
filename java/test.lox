@@ -1,0 +1,17 @@
+class Bacon {
+  init () {
+    this.catchphrase = "Hello world";
+  }
+  eat () {
+    print "Crunch Crunch Crunch";
+    print this;
+  }
+
+  speak () {
+    print this.catchphrase;
+  }
+
+}
+
+var bacon = Bacon();
+bacon.speak();
