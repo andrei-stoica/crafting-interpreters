@@ -1,11 +1,10 @@
 use crate::tree_walk::token::{Token, TokenType};
+use std::{iter::Peekable, str::Chars};
 
 #[derive(Debug)]
 pub struct Tokenizer {
     tokens: Vec<Token>,
     line: u32,
-    current: u32,
-    start: u32,
 }
 
 impl Tokenizer {
@@ -13,8 +12,6 @@ impl Tokenizer {
         Self {
             tokens: Vec::new(),
             line: 0,
-            current: 0,
-            start: 0,
         }
     }
     fn add_token(&mut self, token_type: TokenType, lexeme: &str) {
@@ -33,14 +30,34 @@ impl Tokenizer {
         });
     }
 
-    pub fn parse(&mut self, source: &str) -> Vec<Token> {
-        let mut src = source.chars();
+    fn consume_if(expected: char, src: &mut Peekable<Chars>) -> bool {
+        if let Some(c) = src.peek() {
+            if c == &expected {
+                src.next();
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    fn consume_comment(src: &mut Peekable<Chars>) {
+        while let Some(c) = src.peek() {
+            match c {
+                '\n' => break,
+                _ => src.next(),
+            };
+        }
+    }
+
+    pub fn parse(&mut self, text: &str) -> Vec<Token> {
+        let mut src = text.chars().peekable();
         self.tokens = Vec::new();
         self.line = 0;
-        self.current = 0;
-        self.start = 0;
 
-        while let Some(c) = src.nth(self.current.try_into().unwrap()) {
+        while let Some(c) = src.next() {
             match c {
                 // new line
                 '\n' => self.line += 1,
@@ -55,12 +72,31 @@ impl Tokenizer {
                 '+' => self.add_token_bare(TokenType::Plus),
                 ';' => self.add_token_bare(TokenType::Semicolon),
                 '*' => self.add_token_bare(TokenType::Star),
+
+                // operators
+                '!' if Self::consume_if('=', &mut src) => self.add_token_bare(TokenType::BangEqual),
+                '!' => self.add_token_bare(TokenType::Bang),
+
+                '=' if Self::consume_if('=', &mut src) => {
+                    self.add_token_bare(TokenType::EqualEqual)
+                }
+                '=' => self.add_token_bare(TokenType::Equal),
+
+                '<' if Self::consume_if('=', &mut src) => self.add_token_bare(TokenType::LessEqual),
+                '<' => self.add_token_bare(TokenType::Less),
+
+                '>' if Self::consume_if('=', &mut src) => {
+                    self.add_token_bare(TokenType::GreaterEqual)
+                }
+                '>' => self.add_token_bare(TokenType::Greater),
+
+                // comments
+                '/' if Self::consume_if('/', &mut src) => Self::consume_comment(&mut src),
+                '/' => self.add_token_bare(TokenType::Slash),
                 _ => (),
             }
         }
         self.add_token_bare(TokenType::EOF);
-        self.current += 1;
-
         return self.tokens.clone();
     }
 }
@@ -81,24 +117,6 @@ mod test {
                 lexeme: None,
                 line: 0
             }],
-            tokens
-        );
-
-        let left_paren = "(";
-        let tokens = tokenizer.parse(left_paren);
-        assert_eq!(
-            vec![
-                Token {
-                    token_type: TokenType::LeftParen,
-                    lexeme: None,
-                    line: 0
-                },
-                Token {
-                    token_type: TokenType::EOF,
-                    lexeme: None,
-                    line: 0
-                }
-            ],
             tokens
         );
 
@@ -148,7 +166,7 @@ mod test {
             tokens
         );
 
-        let math = "-+*";
+        let math = "-+*/";
         let tokens = tokenizer.parse(math);
         assert_eq!(
             vec![
@@ -164,6 +182,11 @@ mod test {
                 },
                 Token {
                     token_type: TokenType::Star,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Slash,
                     lexeme: None,
                     line: 0
                 },
@@ -380,6 +403,278 @@ mod test {
                     token_type: TokenType::EOF,
                     lexeme: None,
                     line: 7
+                }
+            ],
+            tokens
+        );
+    }
+
+    #[test]
+    fn test_operators() {
+        let mut tokenizer = Tokenizer::new();
+
+        let src = "!";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Bang,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+        let src = "!=";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::BangEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+
+        let src = "=";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+        let src = "==";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::EqualEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+
+        let src = "<";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Less,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+        let src = "<=";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::LessEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+
+        let src = ">";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Greater,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+        let src = ">=";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::GreaterEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+
+        let src = "= == ! = != > = >= < = <=";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EqualEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Bang,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::BangEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Greater,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::GreaterEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Less,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::LessEqual,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+    }
+
+    #[test]
+    fn test_comment() {
+        let mut tokenizer = Tokenizer::new();
+
+        let src = "// this is a comment";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![Token {
+                token_type: TokenType::EOF,
+                lexeme: None,
+                line: 0
+            }],
+            tokens
+        );
+
+        let src = "// this is a comment
+=";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 1
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 1
+                }
+            ],
+            tokens
+        );
+        let src = "=
+// this is a comment
+=";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Equal,
+                    lexeme: None,
+                    line: 2
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    lexeme: None,
+                    line: 2
                 }
             ],
             tokens
