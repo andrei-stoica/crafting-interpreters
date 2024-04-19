@@ -56,5 +56,6 @@ pub enum TokenType {
 
     EOF,
 
+    Comment(String),
     Unrecognized(TokenizationError),
 }

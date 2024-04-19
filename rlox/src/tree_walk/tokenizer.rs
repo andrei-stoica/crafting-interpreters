@@ -7,7 +7,7 @@ pub struct Tokenizer {
     line: u32,
 }
 
-// TODO: Decide whether or not to keep unrecognized tokens as part of token stream
+// TODO: Decide whether or not to keep unrecognized and comments tokens as part of token stream
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenizationError {
     UntermiatedString(u32),
@@ -54,13 +54,15 @@ impl Tokenizer {
         }
     }
 
-    fn consume_comment(src: &mut Peekable<Chars>) {
+    fn consume_comment(&mut self, src: &mut Peekable<Chars>) -> TokenType {
+        let mut content: String = String::new();
         while let Some(c) = src.peek() {
             match c {
                 '\n' => break,
-                _ => src.next(),
+                _ => content.push(src.next().expect("Character expected")),
             };
         }
+        TokenType::Comment(content)
     }
 
     fn consume_string_lit(
@@ -121,7 +123,10 @@ impl Tokenizer {
                 '>' => self.add_token(TokenType::Greater),
 
                 // comments
-                '/' if Self::consume_if('/', &mut src) => Self::consume_comment(&mut src),
+                '/' if Self::consume_if('/', &mut src) => {
+                    let token_type = self.consume_comment(&mut src);
+                    self.add_token(token_type);
+                }
                 '/' => self.add_token(TokenType::Slash),
 
                 // strings
@@ -605,10 +610,16 @@ mod test {
         let src = "// this is a comment";
         let tokens = tokenizer.parse(src);
         assert_eq!(
-            vec![Token {
-                token_type: TokenType::EOF,
-                line: 0
-            }],
+            vec![
+                Token {
+                    token_type: TokenType::Comment(" this is a comment".into()),
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    line: 0
+                }
+            ],
             tokens
         );
 
@@ -617,6 +628,10 @@ mod test {
         let tokens = tokenizer.parse(src);
         assert_eq!(
             vec![
+                Token {
+                    token_type: TokenType::Comment(" this is a comment".into()),
+                    line: 0,
+                },
                 Token {
                     token_type: TokenType::Equal,
                     line: 1
@@ -637,6 +652,10 @@ mod test {
                 Token {
                     token_type: TokenType::Equal,
                     line: 0
+                },
+                Token {
+                    token_type: TokenType::Comment(" this is a comment".into()),
+                    line: 1,
                 },
                 Token {
                     token_type: TokenType::Equal,
