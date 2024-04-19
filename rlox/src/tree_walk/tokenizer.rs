@@ -1,9 +1,11 @@
 use crate::tree_walk::token::{Token, TokenType};
+use std::collections::HashMap;
 use std::{fmt::Display, iter::Peekable, str::Chars};
 
 #[derive(Debug)]
 pub struct Tokenizer {
     tokens: Vec<Token>,
+    keywords: HashMap<String, TokenType>,
     line: u32,
 }
 
@@ -23,10 +25,30 @@ impl Display for TokenizationError {
         }
     }
 }
+
 impl Tokenizer {
     pub fn new() -> Self {
+        let mut keywords = HashMap::new();
+        keywords.insert("and".into(), TokenType::And);
+        keywords.insert("class".into(), TokenType::Class);
+        keywords.insert("else".into(), TokenType::Else);
+        keywords.insert("false".into(), TokenType::False);
+        keywords.insert("for".into(), TokenType::For);
+        keywords.insert("fun".into(), TokenType::Fun);
+        keywords.insert("if".into(), TokenType::If);
+        keywords.insert("nil".into(), TokenType::Nil);
+        keywords.insert("or".into(), TokenType::Or);
+        keywords.insert("print".into(), TokenType::Print);
+        keywords.insert("return".into(), TokenType::Return);
+        keywords.insert("super".into(), TokenType::Super);
+        keywords.insert("this".into(), TokenType::This);
+        keywords.insert("true".into(), TokenType::True);
+        keywords.insert("var".into(), TokenType::Var);
+        keywords.insert("while".into(), TokenType::While);
+
         Self {
             tokens: Vec::new(),
+            keywords,
             line: 0,
         }
     }
@@ -98,6 +120,21 @@ impl Tokenizer {
 
         TokenType::Number(content.parse().expect("Number should be parsable."))
     }
+    fn consume_identifier(&mut self, src: &mut Peekable<Chars>, c: char) -> TokenType {
+        let mut content: String = String::from(c);
+        while let Some(c) = src.peek() {
+            match c {
+                'a'..='z' | 'A'..='Z' | '0'..='9' => {
+                    content.push(src.next().expect("Identifier char"));
+                }
+                _ => break,
+            }
+        }
+        match self.keywords.get(&content) {
+            None => TokenType::Identifier(content),
+            Some(token_type) => token_type.clone(),
+        }
+    }
 
     pub fn parse(&mut self, text: &str) -> Vec<Token> {
         let mut src = text.chars().peekable();
@@ -154,6 +191,10 @@ impl Tokenizer {
                 '0'..='9' => {
                     let number = self.consume_number_lit(&mut src, c);
                     self.add_token(number);
+                }
+                'a'..='z' | 'A'..='Z' => {
+                    let identifier = self.consume_identifier(&mut src, c);
+                    self.add_token(identifier);
                 }
                 _ => (),
             }
@@ -833,6 +874,119 @@ mod test {
                     token_type: TokenType::EOF,
                     line: 0
                 }
+            ],
+            tokens
+        );
+    }
+
+    #[test]
+    fn test_identifiers() {
+        let mut tokenizer = Tokenizer::new();
+
+        let src = "and class else false for fun if nil or print return super this true var while";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::And,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Class,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Else,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::False,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::For,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Fun,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::If,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Nil,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Or,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Print,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Return,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Super,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::This,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::True,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Var,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::While,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    line: 0
+                },
+            ],
+            tokens
+        );
+
+        let src = "these are identifiers and keywords";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Identifier("these".into()),
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Identifier("are".into()),
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Identifier("identifiers".into()),
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::And,
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::Identifier("keywords".into()),
+                    line: 0
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    line: 0
+                },
             ],
             tokens
         );
