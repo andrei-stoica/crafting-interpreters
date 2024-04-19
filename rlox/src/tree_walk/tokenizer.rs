@@ -87,6 +87,17 @@ impl Tokenizer {
         Err(TokenizationError::UntermiatedString(self.line))
         // error
     }
+    fn consume_number_lit(&mut self, src: &mut Peekable<Chars>, c: char) -> TokenType {
+        let mut content: String = String::from(c);
+        while let Some(c) = src.peek() {
+            match c {
+                '0'..='9' | '.' => content.push(src.next().expect("Next char should exist")),
+                _ => break,
+            }
+        }
+
+        TokenType::Number(content.parse().expect("Number should be parsable."))
+    }
 
     pub fn parse(&mut self, text: &str) -> Vec<Token> {
         let mut src = text.chars().peekable();
@@ -139,6 +150,10 @@ impl Tokenizer {
                             self.add_token(TokenType::Unrecognized(err));
                         }
                     }
+                }
+                '0'..='9' => {
+                    let number = self.consume_number_lit(&mut src, c);
+                    self.add_token(number);
                 }
                 _ => (),
             }
@@ -736,6 +751,87 @@ mod test {
                 Token {
                     token_type: TokenType::EOF,
                     line: 2
+                }
+            ],
+            tokens
+        );
+    }
+
+    #[test]
+    fn test_numbers() {
+        let mut tokenizer = Tokenizer::new();
+
+        let src = "1234567890";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Number(1234567890.0),
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+
+        let src = "-1";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Minus,
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::Number(1.0),
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+
+        let src = "-3.72360";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Minus,
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::Number(3.7236),
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    line: 0
+                }
+            ],
+            tokens
+        );
+
+        let src = "3.7+";
+        let tokens = tokenizer.parse(src);
+        assert_eq!(
+            vec![
+                Token {
+                    token_type: TokenType::Number(3.7),
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::Plus,
+                    line: 0,
+                },
+                Token {
+                    token_type: TokenType::EOF,
+                    line: 0
                 }
             ],
             tokens
