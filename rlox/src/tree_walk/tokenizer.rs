@@ -28,6 +28,8 @@ impl Display for TokenizationError {
 
 impl Tokenizer {
     pub fn new() -> Self {
+        // keywords should be in a lazy cell when that makes it to stable:
+        // https://doc.rust-lang.org/std/cell/struct.LazyCell.html
         let mut keywords = HashMap::new();
         keywords.insert("and".into(), TokenType::And);
         keywords.insert("class".into(), TokenType::Class);
