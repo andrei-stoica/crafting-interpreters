@@ -1,17 +1,19 @@
-class Bacon {
-  init () {
-    this.catchphrase = "Hello world";
+class A {
+  method() {
+    print "A method";
   }
-  eat () {
-    print "Crunch Crunch Crunch";
-    print this;
-  }
-
-  speak () {
-    print this.catchphrase;
-  }
-
 }
 
-var bacon = Bacon();
-bacon.speak();
+class B < A {
+  method() {
+    print "B method";
+  }
+  test() {
+    super.method();
+  }
+}
+
+class C < B {}
+
+C().test();
+
