@@ -1,7 +1,8 @@
+use super::tokenizer::TokenizationError;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
-    pub lexeme: Option<String>,
     pub line: u32,
 }
 
@@ -31,7 +32,7 @@ pub enum TokenType {
     LessEqual,
 
     // literals
-    Identifier,
+    Identifier(String),
     String(String),
     Number(f64),
 
@@ -54,4 +55,6 @@ pub enum TokenType {
     While,
 
     EOF,
+
+    Unrecognized(TokenizationError),
 }
