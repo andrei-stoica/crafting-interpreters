@@ -4,7 +4,7 @@ use std::{fmt::Display, iter::Peekable, str::Chars};
 
 #[derive(Debug)]
 pub struct Tokenizer {
-    tokens: Vec<Token>,
+    pub tokens: Vec<Token>,
     keywords: HashMap<String, TokenType>,
     line: u32,
 }
@@ -138,7 +138,7 @@ impl Tokenizer {
         }
     }
 
-    pub fn parse(&mut self, text: &str) -> Vec<Token> {
+    pub fn parse(&mut self, text: &str) {
         let mut src = text.chars().peekable();
         self.tokens = Vec::new();
         self.line = 0;
@@ -202,7 +202,6 @@ impl Tokenizer {
             }
         }
         self.add_token(TokenType::EOF);
-        return self.tokens.clone();
     }
 }
 
@@ -215,17 +214,17 @@ mod test {
         let mut tokenizer = Tokenizer::new();
 
         let eof = "";
-        let tokens = tokenizer.parse(eof);
+        tokenizer.parse(eof);
         assert_eq!(
             vec![Token {
                 token_type: TokenType::EOF,
                 line: 0
             }],
-            tokens
+            tokenizer.tokens
         );
 
         let parens = "()";
-        let tokens = tokenizer.parse(parens);
+        tokenizer.parse(parens);
         assert_eq!(
             vec![
                 Token {
@@ -241,11 +240,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let braces = "{}";
-        let tokens = tokenizer.parse(braces);
+        tokenizer.parse(braces);
         assert_eq!(
             vec![
                 Token {
@@ -261,11 +260,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let math = "-+*/";
-        let tokens = tokenizer.parse(math);
+        tokenizer.parse(math);
         assert_eq!(
             vec![
                 Token {
@@ -289,11 +288,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let punctuation = ",.;";
-        let tokens = tokenizer.parse(punctuation);
+        tokenizer.parse(punctuation);
         assert_eq!(
             vec![
                 Token {
@@ -313,7 +312,7 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
     }
 
@@ -322,7 +321,7 @@ mod test {
         let mut tokenizer = Tokenizer::new();
 
         let src = "{";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -334,12 +333,12 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "
 {";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -351,13 +350,13 @@ mod test {
                     line: 1
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "
 {
 ";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -369,14 +368,14 @@ mod test {
                     line: 2
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "
 {
 
 ";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -388,7 +387,7 @@ mod test {
                     line: 3
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "{
@@ -397,7 +396,7 @@ mod test {
 }
 }
 }";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -429,7 +428,7 @@ mod test {
                     line: 5
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "
@@ -440,7 +439,7 @@ mod test {
 }
 }
 ";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -472,7 +471,7 @@ mod test {
                     line: 7
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
     }
 
@@ -481,7 +480,7 @@ mod test {
         let mut tokenizer = Tokenizer::new();
 
         let src = "!";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -493,10 +492,10 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
         let src = "!=";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -508,11 +507,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "=";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -524,10 +523,10 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
         let src = "==";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -539,11 +538,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "<";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -555,10 +554,10 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
         let src = "<=";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -570,11 +569,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = ">";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -586,10 +585,10 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
         let src = ">=";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -601,11 +600,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "= == ! = != > = >= < = <=";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -657,7 +656,7 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
     }
 
@@ -666,7 +665,7 @@ mod test {
         let mut tokenizer = Tokenizer::new();
 
         let src = "// this is a comment";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -678,12 +677,12 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "// this is a comment
 =";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -699,12 +698,12 @@ mod test {
                     line: 1
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
         let src = "=
 // this is a comment
 =";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -724,7 +723,7 @@ mod test {
                     line: 2
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
     }
 
@@ -733,7 +732,7 @@ mod test {
         let mut tokenizer = Tokenizer::new();
 
         let src = "\"this is a string\"";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -745,12 +744,12 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "\"this is a multiline string
 \"";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -762,11 +761,11 @@ mod test {
                     line: 1
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "\"this is a unterminated string";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -778,13 +777,13 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "\"this is a unterminated string
 
             ";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -796,7 +795,7 @@ mod test {
                     line: 2
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
     }
 
@@ -805,7 +804,7 @@ mod test {
         let mut tokenizer = Tokenizer::new();
 
         let src = "1234567890";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -817,11 +816,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "-1";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -837,11 +836,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "-3.72360";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -857,11 +856,11 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "3.7+";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -877,7 +876,7 @@ mod test {
                     line: 0
                 }
             ],
-            tokens
+            tokenizer.tokens
         );
     }
 
@@ -886,7 +885,7 @@ mod test {
         let mut tokenizer = Tokenizer::new();
 
         let src = "and class else false for fun if nil or print return super this true var while";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -958,11 +957,11 @@ mod test {
                     line: 0
                 },
             ],
-            tokens
+            tokenizer.tokens
         );
 
         let src = "these are identifiers and keywords";
-        let tokens = tokenizer.parse(src);
+        tokenizer.parse(src);
         assert_eq!(
             vec![
                 Token {
@@ -990,7 +989,7 @@ mod test {
                     line: 0
                 },
             ],
-            tokens
+            tokenizer.tokens
         );
     }
 }
