@@ -1,4 +1,4 @@
-use super::tokenizer::TokenizationError;
+use super::tokenizer::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
@@ -57,5 +57,5 @@ pub enum TokenType {
     EOF,
 
     Comment(String),
-    Unrecognized(TokenizationError),
+    Unrecognized(Error),
 }

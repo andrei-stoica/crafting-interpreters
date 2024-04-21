@@ -11,11 +11,11 @@ pub struct Tokenizer {
 
 // TODO: Decide whether or not to keep unrecognized and comments tokens as part of token stream
 #[derive(Debug, Clone, PartialEq)]
-pub enum TokenizationError {
+pub enum Error {
     UntermiatedString(u32),
 }
 
-impl Display for TokenizationError {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UntermiatedString(line) => {
@@ -25,6 +25,8 @@ impl Display for TokenizationError {
         }
     }
 }
+
+pub type Result<T> = core::result::Result<T, Error>;
 
 impl Tokenizer {
     pub fn new() -> Self {
@@ -89,10 +91,7 @@ impl Tokenizer {
         TokenType::Comment(content)
     }
 
-    fn consume_string_lit(
-        &mut self,
-        src: &mut Peekable<Chars>,
-    ) -> Result<TokenType, TokenizationError> {
+    fn consume_string_lit(&mut self, src: &mut Peekable<Chars>) -> Result<TokenType> {
         let mut content: String = String::new();
         while let Some(c) = src.peek() {
             match c {
@@ -108,7 +107,7 @@ impl Tokenizer {
                 _ => content.push(src.next().expect("terminated string")),
             };
         }
-        Err(TokenizationError::UntermiatedString(self.line))
+        Err(Error::UntermiatedString(self.line))
         // error
     }
     fn consume_number_lit(&mut self, src: &mut Peekable<Chars>, c: char) -> TokenType {
@@ -769,7 +768,7 @@ mod test {
         assert_eq!(
             vec![
                 Token {
-                    token_type: TokenType::Unrecognized(TokenizationError::UntermiatedString(0)),
+                    token_type: TokenType::Unrecognized(Error::UntermiatedString(0)),
                     line: 0,
                 },
                 Token {
@@ -787,7 +786,7 @@ mod test {
         assert_eq!(
             vec![
                 Token {
-                    token_type: TokenType::Unrecognized(TokenizationError::UntermiatedString(2)),
+                    token_type: TokenType::Unrecognized(Error::UntermiatedString(2)),
                     line: 2,
                 },
                 Token {
