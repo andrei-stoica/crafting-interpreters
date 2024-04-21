@@ -9,8 +9,7 @@ type ParseResult = Result<AstNode, ParseError>;
 enum ParseError {
     RanOutOfTokens,
     UnexpectedEOF,
-    UnexpectedToken, // HACK: This should not be used in the long run but
-    // included for quick prototypeing
+    UnexpectedToken, // HACK: This should not be used in the long run but included for quick prototypeing
     UnrecognizedExpression,
     ExpectedSemicolon(Token),
 }
@@ -83,8 +82,10 @@ impl Parser {
         while let Some(token) = self.peek() {
             match token.token_type {
                 Semicolon | Class | For | Fun | If | Print | Return | Var | While => break,
-                _ => self.advance(),
-            };
+                _ => {
+                    let _ = self.advance();
+                }
+            }
         }
     }
 
