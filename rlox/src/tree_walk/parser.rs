@@ -12,6 +12,7 @@ enum ParseError {
     UnexpectedToken, // HACK: This should not be used in the long run but included for quick prototypeing
     UnrecognizedExpression,
     ExpectedSemicolon(Token),
+    ExpectedClosing(Token),
 }
 
 #[derive(Debug, PartialEq)]
@@ -20,9 +21,7 @@ pub enum AstNode {
         stmts: Vec<AstNode>,
     },
     ExprStmt(Box<AstNode>),
-    PrintStmt {
-        expr: Box<AstNode>,
-    },
+    PrintStmt(Box<AstNode>),
     BinaryExpr {
         left: Box<AstNode>,
         operator: Token,
@@ -33,6 +32,7 @@ pub enum AstNode {
         right: Box<AstNode>,
     },
     Literal(LiteralExpr),
+    Grouping(Box<AstNode>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -57,13 +57,12 @@ impl Parser {
         self.tokens.get(self.current)
     }
 
-    fn peek_type(&mut self) -> Option<&TokenType> {
-        Some(&self.tokens.get(self.current)?.token_type)
-    }
-
-    fn advance(&mut self) -> Token {
+    fn advance(&mut self) -> Result<Token, ParseError> {
         self.current += 1;
-        self.tokens[self.current - 1].clone()
+        self.tokens
+            .get(self.current - 1)
+            .ok_or(ParseError::RanOutOfTokens)
+            .cloned()
     }
 
     fn previous(&mut self) -> Token {
@@ -114,21 +113,23 @@ impl Parser {
     }
 
     fn print_statement(&mut self) -> ParseResult {
-        unimplemented!();
+        let print_token = self.advance()?;
+        let expr = self.expression()?;
+        eprintln!("{:?}", expr);
+        let next = self.advance()?;
+
+        match next.token_type {
+            Semicolon => Ok(AstNode::PrintStmt(Box::new(expr))),
+            _ => Err(ParseError::ExpectedSemicolon(print_token)),
+        }
     }
 
     fn expr_statement(&mut self) -> ParseResult {
         let expr = self.expression()?;
-        if let Some(token) = self.peek() {
-            match token.token_type {
-                Semicolon => {
-                    self.advance();
-                    Ok(AstNode::ExprStmt(Box::new(expr)))
-                }
-                _ => Err(ParseError::ExpectedSemicolon(token.clone())),
-            }
-        } else {
-            Err(ParseError::RanOutOfTokens)
+        let next = self.advance()?;
+        match next.token_type {
+            Semicolon => Ok(AstNode::ExprStmt(Box::new(expr))),
+            _ => Err(ParseError::ExpectedSemicolon(next)),
         }
     }
 
@@ -141,7 +142,7 @@ impl Parser {
         while let Some(token) = self.peek() {
             match token.token_type {
                 BangEqual | EqualEqual => {
-                    let operator = self.advance();
+                    let operator = self.advance()?;
                     let right = self.comparison()?;
                     expr = AstNode::BinaryExpr {
                         left: Box::new(expr),
@@ -161,7 +162,7 @@ impl Parser {
         while let Some(token) = self.peek() {
             match token.token_type {
                 Greater | GreaterEqual | Less | LessEqual => {
-                    let operator = self.advance();
+                    let operator = self.advance()?;
                     let right = self.term()?;
                     expr = AstNode::BinaryExpr {
                         left: Box::new(expr),
@@ -181,7 +182,7 @@ impl Parser {
         while let Some(token) = self.peek() {
             match token.token_type {
                 Minus | Plus => {
-                    let operator = self.advance();
+                    let operator = self.advance()?;
                     let right = self.factor()?;
                     expr = AstNode::BinaryExpr {
                         left: Box::new(expr),
@@ -201,7 +202,7 @@ impl Parser {
         while let Some(token) = self.peek() {
             match token.token_type {
                 Star | Slash => {
-                    let operator = self.advance();
+                    let operator = self.advance()?;
                     let right = self.unary()?;
                     expr = AstNode::BinaryExpr {
                         left: Box::new(expr),
@@ -216,33 +217,40 @@ impl Parser {
     }
 
     fn unary(&mut self) -> ParseResult {
-        if let Some(token) = self.peek() {
-            match token.token_type {
-                Bang | Minus => {
-                    let operator = self.advance();
-                    let right = self.unary()?;
-                    Ok(AstNode::UnaryExpr {
-                        operator,
-                        right: Box::new(right),
-                    })
-                }
-                _ => Ok(self.primary()?),
+        let operator = self.advance()?;
+        match operator.token_type {
+            Bang | Minus => {
+                let right = self.unary()?;
+                Ok(AstNode::UnaryExpr {
+                    operator,
+                    right: Box::new(right),
+                })
             }
-        } else {
-            Ok(self.primary()?)
+            _ => self.primary(),
         }
     }
 
     fn primary(&mut self) -> ParseResult {
-        let token = self.advance();
+        let token = self.previous();
         match token.token_type {
             False => Ok(AstNode::Literal(LiteralExpr::False)),
             True => Ok(AstNode::Literal(LiteralExpr::True)),
             Nil => Ok(AstNode::Literal(LiteralExpr::Nil)),
             Number(n) => Ok(AstNode::Literal(LiteralExpr::Number(n.clone()))),
             String(s) => Ok(AstNode::Literal(LiteralExpr::StringLit(s.clone()))),
+            LeftParen => Ok(self.grouping()?),
             EOF => Err(ParseError::UnexpectedEOF),
             _ => Err(ParseError::UnrecognizedExpression),
+        }
+    }
+
+    fn grouping(&mut self) -> ParseResult {
+        let open = self.previous();
+        let expr = self.expression()?;
+        let next = self.advance()?;
+        match next.token_type {
+            RightParen => Ok(AstNode::Grouping(Box::new(expr))),
+            _ => Err(ParseError::ExpectedClosing(open)),
         }
     }
 }
@@ -527,6 +535,103 @@ mod test {
                         right: Box::new(AstNode::Literal(LiteralExpr::Number(6.0)))
                     })),
                 ]
+            }),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_grouping() {
+        let tokens = vec![
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: False,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            Ok(AstNode::Prog {
+                stmts: vec![AstNode::ExprStmt(Box::new(AstNode::Grouping(Box::new(
+                    AstNode::Literal(LiteralExpr::False)
+                )))),]
+            }),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: False,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            Err(ParseError::ExpectedClosing(Token {
+                token_type: LeftParen,
+                line: 0,
+            })),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_print_stmt() {
+        let tokens = vec![
+            Token {
+                token_type: Print,
+                line: 0,
+            },
+            Token {
+                token_type: String("this is a string".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            Ok(AstNode::Prog {
+                stmts: vec![AstNode::PrintStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::StringLit("this is a string".into())
+                )))]
             }),
             expr
         );
