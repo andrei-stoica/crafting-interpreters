@@ -1,16 +1,32 @@
 #![allow(dead_code)]
 
 use crate::tree_walk::{Token, TokenType::*};
+use std::fmt::Display;
 
-pub type ParseResult = Result<AstNode, ParseError>;
+pub type ParseResult = Result<AstNode, Error>;
 
 #[derive(Debug, PartialEq)]
-pub enum ParseError {
+pub enum Error {
     RanOutOfTokens,
     UnexpectedEOF,
     UnrecognizedExpression,
     ExpectedSemicolon(Token),
     ExpectedClosingParen(Token),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let fmt = "[line {}] {}";
+        match self {
+            Self::ExpectedSemicolon(token) => {
+                writeln!(f, "[line {}] Expected Semicolon.", token.line,)
+            }
+            Self::ExpectedClosingParen(token) => {
+                writeln!(f, "[line {}] Expected closing ')'.", token.line)
+            }
+            _ => writeln!(f, "{:?}", self),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -58,11 +74,11 @@ impl Parser {
         self.tokens.get(self.current)
     }
 
-    fn advance(&mut self) -> Result<Token, ParseError> {
+    fn advance(&mut self) -> Result<Token, Error> {
         self.current += 1;
         self.tokens
             .get(self.current - 1)
-            .ok_or(ParseError::RanOutOfTokens)
+            .ok_or(Error::RanOutOfTokens)
             .cloned()
     }
 
@@ -74,20 +90,8 @@ impl Parser {
         self.prog()
     }
 
-    fn print_error_msg(token: Token, msg: &str) {
-        println!("[line {}] {}", token.line, msg);
-    }
-
-    fn report_error(error: ParseError) {
-        match error {
-            ParseError::ExpectedSemicolon(token) => {
-                Self::print_error_msg(token, "Expected Semicolon.")
-            }
-            ParseError::ExpectedClosingParen(token) => {
-                Self::print_error_msg(token, "Expected matching ')'.")
-            }
-            e => println!("{:?}", e),
-        }
+    fn report_error(error: Error) {
+        eprintln!("{}", error);
     }
 
     fn syncronize(&mut self) {
@@ -132,7 +136,7 @@ impl Parser {
                 _ => self.expr_statement(),
             }
         } else {
-            Err(ParseError::RanOutOfTokens)
+            Err(Error::RanOutOfTokens)
         }
     }
 
@@ -143,7 +147,7 @@ impl Parser {
 
         match next.token_type {
             Semicolon => Ok(AstNode::PrintStmt(Box::new(expr))),
-            _ => Err(ParseError::ExpectedSemicolon(print_token)),
+            _ => Err(Error::ExpectedSemicolon(print_token)),
         }
     }
 
@@ -152,7 +156,7 @@ impl Parser {
         let next = self.advance()?;
         match next.token_type {
             Semicolon => Ok(AstNode::ExprStmt(Box::new(expr))),
-            _ => Err(ParseError::ExpectedSemicolon(next)),
+            _ => Err(Error::ExpectedSemicolon(next)),
         }
     }
 
@@ -262,8 +266,8 @@ impl Parser {
             Number(n) => Ok(AstNode::Literal(LiteralExpr::Number(n.clone()))),
             String(s) => Ok(AstNode::Literal(LiteralExpr::StringLit(s.clone()))),
             LeftParen => Ok(self.grouping()?),
-            EOF => Err(ParseError::UnexpectedEOF),
-            _ => Err(ParseError::UnrecognizedExpression),
+            EOF => Err(Error::UnexpectedEOF),
+            _ => Err(Error::UnrecognizedExpression),
         }
     }
 
@@ -273,7 +277,7 @@ impl Parser {
         let next = self.advance()?;
         match next.token_type {
             RightParen => Ok(AstNode::Grouping(Box::new(expr))),
-            _ => Err(ParseError::ExpectedClosingParen(open)),
+            _ => Err(Error::ExpectedClosingParen(open)),
         }
     }
 }
