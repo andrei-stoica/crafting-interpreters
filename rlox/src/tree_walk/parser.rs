@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 
-use crate::tree_walk::TokenType;
 use crate::tree_walk::{Token, TokenType::*};
 
-type ParseResult = Result<AstNode, ParseError>;
+pub type ParseResult = Result<AstNode, ParseError>;
 
 #[derive(Debug, PartialEq)]
-enum ParseError {
+pub enum ParseError {
     RanOutOfTokens,
     UnexpectedEOF,
     UnexpectedToken, // HACK: This should not be used in the long run but included for quick prototypeing
@@ -43,7 +42,7 @@ pub enum LiteralExpr {
     Number(f64),
     StringLit(std::string::String),
 }
-struct Parser {
+pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
 }
