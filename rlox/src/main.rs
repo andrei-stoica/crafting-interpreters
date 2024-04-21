@@ -1,7 +1,7 @@
 mod tree_walk;
 
-use tree_walk::Parser;
-use tree_walk::Tokenizer;
+use tree_walk::parser::Parser;
+use tree_walk::tokenizer::Tokenizer;
 
 fn main() {
     let mut tokenizer = Tokenizer::new();
