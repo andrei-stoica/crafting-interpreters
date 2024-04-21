@@ -3,8 +3,6 @@
 use crate::tree_walk::token::{Token, TokenType::*};
 use std::fmt::Display;
 
-pub type ParseResult = Result<AstNode, Error>;
-
 #[derive(Debug, PartialEq)]
 pub enum Error {
     RanOutOfTokens,
@@ -27,6 +25,8 @@ impl Display for Error {
         }
     }
 }
+
+pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq)]
 pub enum AstNode {
@@ -73,7 +73,7 @@ impl Parser {
         self.tokens.get(self.current)
     }
 
-    fn advance(&mut self) -> Result<Token, Error> {
+    fn advance(&mut self) -> Result<Token> {
         self.current += 1;
         self.tokens
             .get(self.current - 1)
@@ -128,7 +128,7 @@ impl Parser {
         }
     }
 
-    fn statement(&mut self) -> ParseResult {
+    fn statement(&mut self) -> Result<AstNode> {
         if let Some(token) = self.peek() {
             match token.token_type {
                 Print => self.print_statement(),
@@ -139,7 +139,7 @@ impl Parser {
         }
     }
 
-    fn print_statement(&mut self) -> ParseResult {
+    fn print_statement(&mut self) -> Result<AstNode> {
         let print_token = self.advance()?;
         let expr = self.expression()?;
         let next = self.advance()?;
@@ -150,7 +150,7 @@ impl Parser {
         }
     }
 
-    fn expr_statement(&mut self) -> ParseResult {
+    fn expr_statement(&mut self) -> Result<AstNode> {
         let expr = self.expression()?;
         let next = self.advance()?;
         match next.token_type {
@@ -159,11 +159,11 @@ impl Parser {
         }
     }
 
-    fn expression(&mut self) -> ParseResult {
+    fn expression(&mut self) -> Result<AstNode> {
         self.equality()
     }
 
-    fn equality(&mut self) -> ParseResult {
+    fn equality(&mut self) -> Result<AstNode> {
         let mut expr = self.comparison()?;
         while let Some(token) = self.peek() {
             match token.token_type {
@@ -182,7 +182,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> ParseResult {
+    fn comparison(&mut self) -> Result<AstNode> {
         let mut expr = self.term()?;
 
         while let Some(token) = self.peek() {
@@ -202,7 +202,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn term(&mut self) -> ParseResult {
+    fn term(&mut self) -> Result<AstNode> {
         let mut expr = self.factor()?;
 
         while let Some(token) = self.peek() {
@@ -222,7 +222,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn factor(&mut self) -> ParseResult {
+    fn factor(&mut self) -> Result<AstNode> {
         let mut expr = self.unary()?;
 
         while let Some(token) = self.peek() {
@@ -242,7 +242,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> ParseResult {
+    fn unary(&mut self) -> Result<AstNode> {
         let operator = self.advance()?;
         match operator.token_type {
             Bang | Minus => {
@@ -256,7 +256,7 @@ impl Parser {
         }
     }
 
-    fn primary(&mut self) -> ParseResult {
+    fn primary(&mut self) -> Result<AstNode> {
         let token = self.previous();
         match token.token_type {
             False => Ok(AstNode::Literal(LiteralExpr::False)),
@@ -270,7 +270,7 @@ impl Parser {
         }
     }
 
-    fn grouping(&mut self) -> ParseResult {
+    fn grouping(&mut self) -> Result<AstNode> {
         let open = self.previous();
         let expr = self.expression()?;
         let next = self.advance()?;
