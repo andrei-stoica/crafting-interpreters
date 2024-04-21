@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::tree_walk::{Token, TokenType::*};
+use crate::tree_walk::token::{Token, TokenType::*};
 use std::fmt::Display;
 
 pub type ParseResult = Result<AstNode, Error>;
@@ -16,7 +16,6 @@ pub enum Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let fmt = "[line {}] {}";
         match self {
             Self::ExpectedSemicolon(token) => {
                 writeln!(f, "[line {}] Expected Semicolon.", token.line,)
