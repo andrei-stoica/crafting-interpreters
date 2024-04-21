@@ -8,7 +8,6 @@ pub type ParseResult = Result<AstNode, ParseError>;
 pub enum ParseError {
     RanOutOfTokens,
     UnexpectedEOF,
-    UnexpectedToken, // HACK: This should not be used in the long run but included for quick prototypeing
     UnrecognizedExpression,
     ExpectedSemicolon(Token),
     ExpectedClosingParen(Token),
