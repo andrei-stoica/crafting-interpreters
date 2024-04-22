@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use core::slice;
 use std::fmt::Display;
 
 use super::parser::{
@@ -61,65 +62,70 @@ impl Display for RetVal {
     }
 }
 
-// the return value needs to be an error but I haven't come up with the error type yet
 pub fn evaluate(node: AstNode) -> Result<RetVal> {
     match node {
-        Prog(stmts) => {
-            for stmt in stmts {
-                evaluate(stmt)?;
-            }
-            Ok(RetVal::Nil)
-        }
-        PrintStmt(expr) => {
-            println!("{}", evaluate(*expr)?);
-            Ok(RetVal::Nil)
-        }
+        Prog(stmts) => evaluate_prog(stmts),
         ExprStmt(stmt) => evaluate(*stmt),
+        PrintStmt(expr) => evaluate_print_stmt(*expr),
         BinaryExpr {
             left,
             operator,
             right,
-        } => {
-            let left_val = evaluate(*left)?;
-            let right_val = evaluate(*right)?;
-            match operator.token_type {
-                TokenType::Plus => match (left_val, right_val) {
-                    (RetVal::Number(left), RetVal::Number(right)) => {
-                        Ok(RetVal::Number(left + right))
-                    }
-                    (RetVal::String(left), RetVal::String(right)) => {
-                        let val = [left.as_str(), right.as_str()].concat();
-                        Ok(RetVal::String(val))
-                    }
-                    _ => Err(Error::OperationNotSuported { operator }),
-                },
-                TokenType::Minus => match (left_val, right_val) {
-                    (RetVal::Number(left), RetVal::Number(right)) => {
-                        Ok(RetVal::Number(left - right))
-                    }
-                    _ => Err(Error::OperationNotSuported { operator }),
-                },
-                TokenType::Slash => match (left_val, right_val) {
-                    (RetVal::Number(left), RetVal::Number(right)) => {
-                        Ok(RetVal::Number(left / right))
-                    }
-                    _ => Err(Error::OperationNotSuported { operator }),
-                },
-                TokenType::Star => match (left_val, right_val) {
-                    (RetVal::Number(left), RetVal::Number(right)) => {
-                        Ok(RetVal::Number(left * right))
-                    }
-                    _ => Err(Error::OperationNotSuported { operator }),
-                },
-                _ => {
-                    eprintln!("{operator:#?}");
-                    unimplemented!();
-                }
-            }
-        }
+        } => evaluate_binary_expr(*left, operator, *right),
         Literal(expr) => Ok(expr.into()),
         _ => {
             eprintln!("{node:#?}");
+            unimplemented!();
+        }
+    }
+}
+
+fn evaluate_prog(stmts: Vec<AstNode>) -> Result<RetVal> {
+    for stmt in stmts {
+        evaluate(stmt)?;
+    }
+    Ok(RetVal::Nil)
+}
+
+fn evaluate_print_stmt(expr: AstNode) -> Result<RetVal> {
+    println!("{}", evaluate(expr)?);
+    Ok(RetVal::Nil)
+}
+
+fn evaluate_binary_expr(left: AstNode, operator: Token, right: AstNode) -> Result<RetVal> {
+    let left_val = evaluate(left)?;
+    let right_val = evaluate(right)?;
+    match operator.token_type {
+        TokenType::Plus => match (left_val, right_val) {
+            (RetVal::Number(left), RetVal::Number(right)) => Ok(RetVal::Number(left + right)),
+            (RetVal::String(left), RetVal::String(right)) => {
+                let val = [left.as_str(), right.as_str()].concat();
+                Ok(RetVal::String(val))
+            }
+            _ => Err(Error::OperationNotSuported {
+                operator: operator.clone(),
+            }),
+        },
+        TokenType::Minus => match (left_val, right_val) {
+            (RetVal::Number(left), RetVal::Number(right)) => Ok(RetVal::Number(left - right)),
+            _ => Err(Error::OperationNotSuported {
+                operator: operator.clone(),
+            }),
+        },
+        TokenType::Slash => match (left_val, right_val) {
+            (RetVal::Number(left), RetVal::Number(right)) => Ok(RetVal::Number(left / right)),
+            _ => Err(Error::OperationNotSuported {
+                operator: operator.clone(),
+            }),
+        },
+        TokenType::Star => match (left_val, right_val) {
+            (RetVal::Number(left), RetVal::Number(right)) => Ok(RetVal::Number(left * right)),
+            _ => Err(Error::OperationNotSuported {
+                operator: operator.clone(),
+            }),
+        },
+        _ => {
+            eprintln!("{operator:#?}");
             unimplemented!();
         }
     }
