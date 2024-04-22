@@ -88,8 +88,7 @@ pub fn evaluate(node: AstNode) -> Result<RetVal> {
                         Ok(RetVal::Number(left + right))
                     }
                     (RetVal::String(left), RetVal::String(right)) => {
-                        let mut val = left.clone();
-                        val.push_str(&right);
+                        let val = [left.as_str(), right.as_str()].concat();
                         Ok(RetVal::String(val))
                     }
                     _ => Err(Error::OperationNotSuported { operator }),
