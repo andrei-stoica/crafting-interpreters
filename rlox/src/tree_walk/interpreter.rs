@@ -50,6 +50,17 @@ impl From<LiteralExpr> for RetVal {
     }
 }
 
+impl Display for RetVal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Number(value) => write!(f, "{}", value),
+            Self::String(value) => write!(f, "{}", value),
+            Self::Bool(value) => write!(f, "{}", value),
+            Self::Nil => write!(f, "nil"),
+        }
+    }
+}
+
 // the return value needs to be an error but I haven't come up with the error type yet
 pub fn evaluate(node: AstNode) -> Result<RetVal> {
     match node {
@@ -57,6 +68,10 @@ pub fn evaluate(node: AstNode) -> Result<RetVal> {
             for stmt in stmts {
                 evaluate(stmt)?;
             }
+            Ok(RetVal::Nil)
+        }
+        PrintStmt(expr) => {
+            println!("{}", evaluate(*expr)?);
             Ok(RetVal::Nil)
         }
         ExprStmt(stmt) => evaluate(*stmt),
