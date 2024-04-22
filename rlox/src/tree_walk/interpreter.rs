@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
-use std::{borrow::BorrowMut, fmt::Display, io::Write};
+use std::{
+    fmt::{format, Display},
+    io::Write,
+};
 
 use super::parser::{
     AstNode::{self, *},
@@ -10,17 +13,26 @@ use super::token::{Token, TokenType};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    OperationNotSuported { operator: Token },
+    OperationNotSuported {
+        operator: Token,
+        values: (RetVal, Option<RetVal>),
+    },
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::OperationNotSuported { operator } => write!(
-                f,
-                "[Line {}] {:?} not supported for given type(s)",
-                operator.line, operator.token_type
-            ),
+            Self::OperationNotSuported { operator, values } => {
+                let second_value = match &values.1 {
+                    Some(value) => format!("and {:?}", value),
+                    None => "".into(),
+                };
+                write!(
+                    f,
+                    "[Line {}] {:?} not supported for {:?} {}",
+                    operator.line, operator.token_type, values.0, second_value
+                )
+            }
             _ => todo!(),
         }
     }
@@ -30,6 +42,7 @@ impl std::error::Error for Error {}
 
 type Result<T> = std::result::Result<T, Error>;
 
+// TODO: RetVal would make more sense as LoxType
 #[derive(Debug, PartialEq)]
 pub enum RetVal {
     Number(f64),
@@ -106,7 +119,15 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_prog(&mut self, stmts: Vec<AstNode>) -> Result<RetVal> {
         for stmt in stmts {
-            self.evaluate(stmt)?;
+            match self.evaluate(stmt) {
+                Err(err) => {
+                    let msg = format!("{}", err);
+                    self.err_output.write(msg.as_bytes());
+                    break;
+                }
+                Ok(_) => (),
+                _ => unimplemented!(),
+            };
         }
         Ok(RetVal::Nil)
     }
@@ -132,47 +153,63 @@ impl<'a> Interpreter<'a> {
                     let val = [l.as_str(), r.as_str()].concat();
                     Ok(RetVal::String(val))
                 }
-                _ => Err(Error::OperationNotSuported {
+                (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
+                    values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Minus => match (left_val, right_val) {
                 (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Number(l - r)),
-                _ => Err(Error::OperationNotSuported {
+                (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
+                    values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Slash => match (left_val, right_val) {
                 (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Number(l / r)),
-                _ => Err(Error::OperationNotSuported {
+                (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
+                    values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Star => match (left_val, right_val) {
                 (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Number(l * r)),
-                _ => Err(Error::OperationNotSuported {
+                (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
+                    values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Greater => match (left_val, right_val) {
                 (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l > r)),
                 (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l > r)),
-                _ => Err(Error::OperationNotSuported { operator }),
+                (left_val, right_val) => Err(Error::OperationNotSuported {
+                    operator,
+                    values: (left_val, Some(right_val)),
+                }),
             },
             TokenType::GreaterEqual => match (left_val, right_val) {
                 (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l >= r)),
                 (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l >= r)),
-                _ => Err(Error::OperationNotSuported { operator }),
+                (left_val, right_val) => Err(Error::OperationNotSuported {
+                    operator,
+                    values: (left_val, Some(right_val)),
+                }),
             },
             TokenType::Less => match (left_val, right_val) {
                 (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l < r)),
                 (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l < r)),
-                _ => Err(Error::OperationNotSuported { operator }),
+                (left_val, right_val) => Err(Error::OperationNotSuported {
+                    operator,
+                    values: (left_val, Some(right_val)),
+                }),
             },
             TokenType::LessEqual => match (left_val, right_val) {
                 (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l <= r)),
                 (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l <= r)),
-                _ => Err(Error::OperationNotSuported { operator }),
+                (left_val, right_val) => Err(Error::OperationNotSuported {
+                    operator,
+                    values: (left_val, Some(right_val)),
+                }),
             },
             TokenType::EqualEqual => Ok(self.is_equal(left_val, right_val)),
             TokenType::BangEqual => Ok(self.is_not_truthy(self.is_equal(left_val, right_val))),
@@ -208,7 +245,10 @@ impl<'a> Interpreter<'a> {
                 if let RetVal::Number(n) = right_val {
                     Ok(RetVal::Number(-n))
                 } else {
-                    Err(Error::OperationNotSuported { operator })
+                    Err(Error::OperationNotSuported {
+                        operator,
+                        values: (right_val, None),
+                    })
                 }
             }
             TokenType::Bang => Ok(self.is_not_truthy(right_val)),
@@ -245,6 +285,7 @@ impl<'a> Interpreter<'a> {
 
 #[cfg(test)]
 mod test {
+    // TODO: add testing of errors
     use std::{borrow::BorrowMut, cell::RefCell};
 
     use super::*;
