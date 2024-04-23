@@ -1,46 +1,14 @@
 #![allow(dead_code)]
 
-use std::{
-    fmt::{format, Display},
-    io::Write,
-};
+use std::{fmt::Display, io::Write};
 
-use super::parser::{
+use crate::tree_walk::parser::{
     AstNode::{self, *},
     LiteralExpr,
 };
-use super::token::{Token, TokenType};
+use crate::tree_walk::token::{Token, TokenType};
 
-#[derive(Debug, PartialEq)]
-pub enum Error {
-    OperationNotSuported {
-        operator: Token,
-        values: (RetVal, Option<RetVal>),
-    },
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::OperationNotSuported { operator, values } => {
-                let second_value = match &values.1 {
-                    Some(value) => format!("and {:?}", value),
-                    None => "".into(),
-                };
-                write!(
-                    f,
-                    "[Line {}] {:?} not supported for {:?} {}",
-                    operator.line, operator.token_type, values.0, second_value
-                )
-            }
-            _ => todo!(),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-type Result<T> = std::result::Result<T, Error>;
+use super::{Error, Result};
 
 // TODO: RetVal would make more sense as LoxType
 #[derive(Debug, PartialEq)]
@@ -122,11 +90,11 @@ impl<'a> Interpreter<'a> {
             match self.evaluate(stmt) {
                 Err(err) => {
                     let msg = format!("{}", err);
-                    self.err_output.write(msg.as_bytes());
+                    let write_res = self.err_output.write(msg.as_bytes());
+                    assert!(write_res.is_ok());
                     break;
                 }
                 Ok(_) => (),
-                _ => unimplemented!(),
             };
         }
         Ok(RetVal::Nil)
@@ -134,7 +102,8 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_print_stmt(&mut self, expr: AstNode) -> Result<RetVal> {
         let output = format!("{}", self.evaluate(expr)?);
-        self.output.write(output.as_bytes()); // TODO: need to see what I do with this return value
+        let write_res = self.output.write(output.as_bytes());
+        assert!(write_res.is_ok());
         Ok(RetVal::Nil)
     }
 
