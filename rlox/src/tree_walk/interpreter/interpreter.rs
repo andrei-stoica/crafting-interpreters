@@ -12,26 +12,26 @@ use super::{Error, Result};
 
 // TODO: RetVal would make more sense as LoxType
 #[derive(Debug, PartialEq)]
-pub enum RetVal {
+pub enum LoxType {
     Number(f64),
     Bool(bool),
     String(std::string::String),
     Nil,
 }
 
-impl From<LiteralExpr> for RetVal {
+impl From<LiteralExpr> for LoxType {
     fn from(value: LiteralExpr) -> Self {
         match value {
-            LiteralExpr::False => RetVal::Bool(false),
-            LiteralExpr::True => RetVal::Bool(true),
-            LiteralExpr::StringLit(s) => RetVal::String(s),
-            LiteralExpr::Number(n) => RetVal::Number(n),
-            LiteralExpr::Nil => RetVal::Nil,
+            LiteralExpr::False => LoxType::Bool(false),
+            LiteralExpr::True => LoxType::Bool(true),
+            LiteralExpr::StringLit(s) => LoxType::String(s),
+            LiteralExpr::Number(n) => LoxType::Number(n),
+            LiteralExpr::Nil => LoxType::Nil,
         }
     }
 }
 
-impl Display for RetVal {
+impl Display for LoxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Number(value) => write!(f, "{}", value),
@@ -63,7 +63,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn evaluate(&mut self, node: AstNode) -> Result<RetVal> {
+    pub fn evaluate(&mut self, node: AstNode) -> Result<LoxType> {
         match node {
             // NOTE: statements returning values does not make sense, but I
             // will need to rewrite test to change
@@ -85,7 +85,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_prog(&mut self, stmts: Vec<AstNode>) -> Result<RetVal> {
+    fn evaluate_prog(&mut self, stmts: Vec<AstNode>) -> Result<LoxType> {
         for stmt in stmts {
             match self.evaluate(stmt) {
                 Err(err) => {
@@ -97,14 +97,14 @@ impl<'a> Interpreter<'a> {
                 Ok(_) => (),
             };
         }
-        Ok(RetVal::Nil)
+        Ok(LoxType::Nil)
     }
 
-    fn evaluate_print_stmt(&mut self, expr: AstNode) -> Result<RetVal> {
+    fn evaluate_print_stmt(&mut self, expr: AstNode) -> Result<LoxType> {
         let output = format!("{}", self.evaluate(expr)?);
         let write_res = self.output.write(output.as_bytes());
         assert!(write_res.is_ok());
-        Ok(RetVal::Nil)
+        Ok(LoxType::Nil)
     }
 
     fn evaluate_binary_expr(
@@ -112,15 +112,15 @@ impl<'a> Interpreter<'a> {
         left: AstNode,
         operator: Token,
         right: AstNode,
-    ) -> Result<RetVal> {
+    ) -> Result<LoxType> {
         let left_val = self.evaluate(left)?;
         let right_val = self.evaluate(right)?;
         match operator.token_type {
             TokenType::Plus => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Number(l + r)),
-                (RetVal::String(l), RetVal::String(r)) => {
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Number(l + r)),
+                (LoxType::String(l), LoxType::String(r)) => {
                     let val = [l.as_str(), r.as_str()].concat();
-                    Ok(RetVal::String(val))
+                    Ok(LoxType::String(val))
                 }
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
@@ -128,53 +128,53 @@ impl<'a> Interpreter<'a> {
                 }),
             },
             TokenType::Minus => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Number(l - r)),
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Number(l - r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
                     values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Slash => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Number(l / r)),
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Number(l / r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
                     values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Star => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Number(l * r)),
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Number(l * r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
                     values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Greater => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l > r)),
-                (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l > r)),
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l > r)),
+                (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l > r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator,
                     values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::GreaterEqual => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l >= r)),
-                (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l >= r)),
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l >= r)),
+                (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l >= r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator,
                     values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::Less => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l < r)),
-                (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l < r)),
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l < r)),
+                (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l < r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator,
                     values: (left_val, Some(right_val)),
                 }),
             },
             TokenType::LessEqual => match (left_val, right_val) {
-                (RetVal::Number(l), RetVal::Number(r)) => Ok(RetVal::Bool(l <= r)),
-                (RetVal::String(l), RetVal::String(r)) => Ok(RetVal::Bool(l <= r)),
+                (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l <= r)),
+                (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l <= r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator,
                     values: (left_val, Some(right_val)),
@@ -189,30 +189,30 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn is_equal(&self, left: RetVal, right: RetVal) -> RetVal {
+    fn is_equal(&self, left: LoxType, right: LoxType) -> LoxType {
         match (left, right) {
-            (RetVal::Nil, RetVal::Nil) => RetVal::Bool(true),
-            (RetVal::Nil, _) => RetVal::Bool(false),
+            (LoxType::Nil, LoxType::Nil) => LoxType::Bool(true),
+            (LoxType::Nil, _) => LoxType::Bool(false),
 
-            (RetVal::Number(left_val), RetVal::Number(right_val)) => {
-                RetVal::Bool(left_val == right_val)
+            (LoxType::Number(left_val), LoxType::Number(right_val)) => {
+                LoxType::Bool(left_val == right_val)
             }
-            (RetVal::String(left_val), RetVal::String(right_val)) => {
-                RetVal::Bool(left_val == right_val)
+            (LoxType::String(left_val), LoxType::String(right_val)) => {
+                LoxType::Bool(left_val == right_val)
             }
-            (RetVal::Bool(left_val), RetVal::Bool(right_val)) => {
-                RetVal::Bool(left_val == right_val)
+            (LoxType::Bool(left_val), LoxType::Bool(right_val)) => {
+                LoxType::Bool(left_val == right_val)
             }
             (_, _) => unimplemented!(),
         }
     }
 
-    fn evaluate_unary_expr(&mut self, operator: Token, right: AstNode) -> Result<RetVal> {
+    fn evaluate_unary_expr(&mut self, operator: Token, right: AstNode) -> Result<LoxType> {
         let right_val = self.evaluate(right)?;
         match operator.token_type {
             TokenType::Minus => {
-                if let RetVal::Number(n) = right_val {
-                    Ok(RetVal::Number(-n))
+                if let LoxType::Number(n) = right_val {
+                    Ok(LoxType::Number(-n))
                 } else {
                     Err(Error::OperationNotSuported {
                         operator,
@@ -228,11 +228,11 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn is_not_truthy(&self, value: RetVal) -> RetVal {
+    fn is_not_truthy(&self, value: LoxType) -> LoxType {
         let v = match value {
-            RetVal::Bool(v) => v,
+            LoxType::Bool(v) => v,
             _ => {
-                if let RetVal::Bool(v) = self.is_truthy(value) {
+                if let LoxType::Bool(v) = self.is_truthy(value) {
                     v
                 } else {
                     unreachable!("All RetVal should be converted into Bool by this point")
@@ -240,14 +240,14 @@ impl<'a> Interpreter<'a> {
             }
         };
 
-        RetVal::Bool(!v)
+        LoxType::Bool(!v)
     }
 
-    fn is_truthy(&self, value: RetVal) -> RetVal {
+    fn is_truthy(&self, value: LoxType) -> LoxType {
         match value {
-            RetVal::Nil => RetVal::Bool(false),
-            RetVal::Bool(v) => RetVal::Bool(v),
-            _ => RetVal::Bool(true),
+            LoxType::Nil => LoxType::Bool(false),
+            LoxType::Bool(v) => LoxType::Bool(v),
+            _ => LoxType::Bool(true),
         }
     }
 }
@@ -289,7 +289,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Number(3.0)), res);
+        assert_eq!(Ok(LoxType::Number(3.0)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -300,7 +300,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Number(-1.0)), res);
+        assert_eq!(Ok(LoxType::Number(-1.0)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -311,7 +311,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Number(0.5)), res);
+        assert_eq!(Ok(LoxType::Number(0.5)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
             left: Box::new(AstNode::UnaryExpr {
@@ -328,7 +328,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Number(-0.5)), res);
+        assert_eq!(Ok(LoxType::Number(-0.5)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
@@ -339,7 +339,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Number(4.0)), res);
+        assert_eq!(Ok(LoxType::Number(4.0)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -350,7 +350,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         }));
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::String("AB".into())), res);
+        assert_eq!(Ok(LoxType::String("AB".into())), res);
     }
 
     #[test]
@@ -367,7 +367,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::True)),
@@ -378,7 +378,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::False)),
@@ -389,7 +389,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -400,7 +400,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -411,7 +411,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -422,7 +422,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -433,7 +433,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Nil)),
@@ -444,7 +444,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Nil)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Nil)),
@@ -455,7 +455,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Nil)),
@@ -466,7 +466,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Nil)),
@@ -477,7 +477,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(0.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Nil)),
@@ -490,7 +490,7 @@ mod test {
             ))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // BangEqual
         let prog = AstNode::BinaryExpr {
@@ -502,7 +502,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::True)),
@@ -513,7 +513,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::False)),
@@ -524,7 +524,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -535,7 +535,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -546,7 +546,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -557,7 +557,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -568,7 +568,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // Greater
         let prog = AstNode::BinaryExpr {
@@ -580,7 +580,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -591,7 +591,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
@@ -602,7 +602,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -613,7 +613,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -624,7 +624,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
@@ -635,7 +635,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         // GreaterEqual
         let prog = AstNode::BinaryExpr {
@@ -647,7 +647,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -658,7 +658,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
@@ -669,7 +669,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -680,7 +680,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -691,7 +691,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
@@ -702,7 +702,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         // Less
         let prog = AstNode::BinaryExpr {
@@ -714,7 +714,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -725,7 +725,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
@@ -736,7 +736,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -747,7 +747,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -758,7 +758,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
@@ -769,7 +769,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // LessEqual
         let prog = AstNode::BinaryExpr {
@@ -781,7 +781,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
@@ -792,7 +792,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
@@ -803,7 +803,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -814,7 +814,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -825,7 +825,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
@@ -836,7 +836,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // Unary negate
         let prog = AstNode::UnaryExpr {
@@ -847,7 +847,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::UnaryExpr {
             operator: Token {
@@ -857,7 +857,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::UnaryExpr {
             operator: Token {
@@ -867,7 +867,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Nil)),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(true)), res);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::UnaryExpr {
             operator: Token {
@@ -877,7 +877,7 @@ mod test {
             right: Box::new(AstNode::Literal(LiteralExpr::Number(0.0))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::UnaryExpr {
             operator: Token {
@@ -889,7 +889,7 @@ mod test {
             ))),
         };
         let res = interpreter.evaluate(prog);
-        assert_eq!(Ok(RetVal::Bool(false)), res);
+        assert_eq!(Ok(LoxType::Bool(false)), res);
     }
 
     #[test]
@@ -906,7 +906,7 @@ mod test {
                 "This is a string".into(),
             ))));
             let res = interpreter.evaluate(prog);
-            assert_eq!(Ok(RetVal::Nil), res);
+            assert_eq!(Ok(LoxType::Nil), res);
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
         assert_eq!("This is a string".to_string(), output);

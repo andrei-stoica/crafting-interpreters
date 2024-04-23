@@ -1,13 +1,13 @@
 use std::fmt::Display;
 
-use super::RetVal;
+use super::LoxType;
 use crate::tree_walk::token::Token;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
     OperationNotSuported {
         operator: Token,
-        values: (RetVal, Option<RetVal>),
+        values: (LoxType, Option<LoxType>),
     },
 }
 
