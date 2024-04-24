@@ -4,7 +4,10 @@ use crate::tree_walk::token::{Token, TokenType::*};
 #[derive(Debug, PartialEq)]
 pub enum AstNode {
     Prog(Vec<AstNode>),
-    ProgInvalid(Vec<AstNode>),
+    ProgInvalid {
+        stmts: Vec<AstNode>,
+        errors: Vec<Error>,
+    },
     ExprStmt(Box<AstNode>),
     PrintStmt(Box<AstNode>),
     BinaryExpr {
@@ -58,7 +61,7 @@ impl Parser {
         self.prog()
     }
 
-    fn report_error(error: Error) {
+    fn report_error(error: &Error) {
         eprintln!("{}", error);
     }
 
@@ -75,6 +78,7 @@ impl Parser {
 
     fn prog(&mut self) -> AstNode {
         let mut stmts = Vec::new();
+        let mut errors = Vec::new();
         let mut invalid = false;
 
         while let Some(token) = self.peek() {
@@ -82,7 +86,8 @@ impl Parser {
                 EOF => break,
                 _ => match self.statement() {
                     Err(e) => {
-                        Self::report_error(e);
+                        Self::report_error(&e);
+                        errors.push(e);
                         self.syncronize();
                         invalid = true;
                     }
@@ -93,7 +98,7 @@ impl Parser {
 
         match invalid {
             false => AstNode::Prog(stmts),
-            true => AstNode::ProgInvalid(stmts),
+            true => AstNode::ProgInvalid { stmts, errors },
         }
     }
 
@@ -252,6 +257,8 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
+    use crate::tree_walk::token::TokenType;
+
     use super::*;
 
     #[test]
@@ -261,7 +268,13 @@ mod test {
             line: 0,
         }];
         let expr = Parser::new(tokens).parse();
-        assert_eq!(AstNode::ProgInvalid(vec![]), expr);
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: vec![],
+                errors: vec![Error::RanOutOfTokens]
+            },
+            expr
+        );
 
         let tokens = vec![
             Token {
@@ -274,7 +287,16 @@ mod test {
             },
         ];
         let expr = Parser::new(tokens).parse();
-        assert_eq!(AstNode::ProgInvalid(vec![]), expr);
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: vec![],
+                errors: vec![Error::ExpectedSemicolon(Token {
+                    token_type: EOF,
+                    line: 0
+                })]
+            },
+            expr
+        );
 
         let tokens = vec![Token {
             token_type: EOF,
@@ -574,7 +596,16 @@ mod test {
             },
         ];
         let expr = Parser::new(tokens).parse();
-        assert_eq!(AstNode::ProgInvalid(vec![]), expr);
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: vec![],
+                errors: vec![Error::ExpectedClosingParen(Token {
+                    token_type: LeftParen,
+                    line: 0
+                })]
+            },
+            expr
+        );
     }
 
     #[test]
