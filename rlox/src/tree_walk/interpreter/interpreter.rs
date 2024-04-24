@@ -11,6 +11,7 @@ pub struct Interpreter<'a> {
     // these enable redirecting output so that print can be tested
     output: Box<(dyn Write + 'a)>,
     err_output: Box<(dyn Write + 'a)>,
+
     environment: Environment,
 }
 
@@ -34,6 +35,7 @@ impl<'a> Interpreter<'a> {
             Prog(stmts) => self.evaluate_prog(stmts),
             ExprStmt(stmt) => self.evaluate(*stmt),
             PrintStmt(expr) => self.evaluate_print_stmt(*expr),
+            DeclExpr { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
             BinaryExpr {
                 left,
                 operator,
@@ -69,6 +71,19 @@ impl<'a> Interpreter<'a> {
         let write_res = self.output.write(output.as_bytes());
         assert!(write_res.is_ok());
         Ok(LoxType::Nil)
+    }
+
+    fn evaluate_var_decl_stmt(
+        &mut self,
+        identifier: String,
+        expr: Option<Box<AstNode>>,
+    ) -> Result<LoxType> {
+        let expr_val = match expr {
+            Some(expr) => self.evaluate(*expr)?,
+            _ => LoxType::Nil,
+        };
+        self.environment.state.insert(identifier, expr_val.clone());
+        Ok(expr_val)
     }
 
     fn evaluate_binary_expr(
@@ -875,5 +890,32 @@ mod test {
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
         assert_eq!("This is a string".to_string(), output);
+    }
+
+    #[test]
+    fn test_var_decl_stmt() {
+        let mut interpreter = Interpreter::new();
+
+        let prog = AstNode::DeclExpr {
+            identifier: "test".into(),
+            expr: Some(Box::new(Literal(LiteralExpr::Number(1.0)))),
+        };
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Number(1.0)), res);
+        assert_eq!(
+            Some(LoxType::Number(1.0)),
+            interpreter.environment.state.get("test").cloned()
+        );
+
+        let prog = AstNode::DeclExpr {
+            identifier: "test".into(),
+            expr: None,
+        };
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(
+            Some(LoxType::Nil),
+            interpreter.environment.state.get("test").cloned()
+        );
     }
 }

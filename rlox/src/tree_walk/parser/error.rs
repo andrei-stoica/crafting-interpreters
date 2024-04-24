@@ -10,6 +10,8 @@ pub enum Error {
     UnrecognizedExpression,
     ExpectedSemicolon(Token),
     ExpectedClosingParen(Token),
+    VarExpectedIdentifer(Token),
+    VarExpectedEqual(Token),
 }
 
 impl Display for Error {
@@ -20,6 +22,16 @@ impl Display for Error {
             }
             Self::ExpectedClosingParen(token) => {
                 writeln!(f, "[line {}] Expected closing ')'.", token.line)
+            }
+            Self::VarExpectedIdentifer(token) => {
+                writeln!(
+                    f,
+                    "[line {}] Expected Identifer after {:?}.",
+                    token.line, token.token_type
+                )
+            }
+            Self::VarExpectedEqual(token) => {
+                writeln!(f, "[line {}] Expected '=' after Identifer.", token.line)
             }
             _ => writeln!(f, "{:?}", self),
         }

@@ -10,6 +10,10 @@ pub enum AstNode {
     },
     ExprStmt(Box<AstNode>),
     PrintStmt(Box<AstNode>),
+    DeclExpr {
+        identifier: std::string::String,
+        expr: Option<Box<AstNode>>,
+    },
     BinaryExpr {
         left: Box<AstNode>,
         operator: Token,
@@ -21,6 +25,7 @@ pub enum AstNode {
     },
     Literal(LiteralExpr),
     Grouping(Box<AstNode>),
+    Identifier(std::string::String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,7 +73,11 @@ impl Parser {
     fn syncronize(&mut self) {
         while let Some(token) = self.peek() {
             match token.token_type {
-                Semicolon | Class | For | Fun | If | Print | Return | Var | While => break,
+                Class | For | Fun | If | Print | Return | Var | While => break,
+                Semicolon => {
+                    self.advance();
+                    break;
+                }
                 _ => {
                     let _ = self.advance();
                 }
@@ -84,7 +93,7 @@ impl Parser {
         while let Some(token) = self.peek() {
             match token.token_type {
                 EOF => break,
-                _ => match self.statement() {
+                _ => match self.decleration() {
                     Err(e) => {
                         Self::report_error(&e);
                         errors.push(e);
@@ -99,6 +108,41 @@ impl Parser {
         match invalid {
             false => AstNode::Prog(stmts),
             true => AstNode::ProgInvalid { stmts, errors },
+        }
+    }
+
+    fn decleration(&mut self) -> Result<AstNode> {
+        if let Some(token) = self.peek() {
+            match token.token_type {
+                Var => self.var_decleration(),
+                _ => self.statement(),
+            }
+        } else {
+            Err(Error::RanOutOfTokens)
+        }
+    }
+
+    fn var_decleration(&mut self) -> Result<AstNode> {
+        let var_token = self.advance()?;
+        let next = self.advance()?;
+        let identifier = if let Identifier(name) = next.token_type {
+            name
+        } else {
+            return Err(Error::VarExpectedIdentifer(var_token));
+        };
+        let next = self.peek();
+        let expr = match next {
+            Some(token) if token.token_type == Equal => {
+                self.advance();
+                Some(Box::new(self.expression()?))
+            }
+            _ => None,
+        };
+
+        let next = self.advance()?;
+        match next.token_type {
+            Semicolon => Ok(AstNode::DeclExpr { identifier, expr }),
+            _ => Err(Error::ExpectedSemicolon(var_token)),
         }
     }
 
@@ -239,6 +283,7 @@ impl Parser {
             Number(n) => Ok(AstNode::Literal(LiteralExpr::Number(n.clone()))),
             String(s) => Ok(AstNode::Literal(LiteralExpr::StringLit(s.clone()))),
             LeftParen => Ok(self.grouping()?),
+            Identifier(name) => Ok(AstNode::Identifier(name)),
             EOF => Err(Error::UnexpectedEOF),
             _ => Err(Error::UnrecognizedExpression),
         }
@@ -257,7 +302,6 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
-    use crate::tree_walk::token::TokenType;
 
     use super::*;
 
@@ -633,6 +677,139 @@ mod test {
             AstNode::Prog(vec![AstNode::PrintStmt(Box::new(AstNode::Literal(
                 LiteralExpr::StringLit("this is a string".into())
             )))]),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_var_decl_stmt() {
+        let tokens = vec![
+            Token {
+                token_type: Var,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("this".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Equal,
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::DeclExpr {
+                identifier: "this".into(),
+                expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0))))
+            }]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Var,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("this".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::DeclExpr {
+                identifier: "this".into(),
+                expr: None,
+            }]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Var,
+                line: 0,
+            },
+            Token {
+                token_type: Equal,
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: vec![],
+                errors: vec![Error::VarExpectedIdentifer(Token {
+                    line: 0,
+                    token_type: Var
+                })]
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Var,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("name".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: vec![],
+                errors: vec![Error::ExpectedSemicolon(Token {
+                    line: 0,
+                    token_type: Var
+                })]
+            },
             expr
         );
     }

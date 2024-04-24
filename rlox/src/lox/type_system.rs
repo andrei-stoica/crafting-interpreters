@@ -3,7 +3,7 @@ use crate::tree_walk::parser::LiteralExpr; // This might need to come out of
 
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LoxType {
     Number(f64),
     Bool(bool),
