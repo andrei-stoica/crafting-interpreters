@@ -70,10 +70,23 @@ impl Parser {
         eprintln!("{}", error);
     }
 
+    fn expect_semicolon(
+        &mut self,
+        line: u32,
+        preceding: std::string::String,
+        ret_val: Result<AstNode>,
+    ) -> Result<AstNode> {
+        let next = self.advance()?;
+        match next.token_type {
+            Semicolon => ret_val,
+            _ => Err(Error::ExpectedSemicolon { line, preceding }),
+        }
+    }
+
     fn syncronize(&mut self) {
         while let Some(token) = self.peek() {
             match token.token_type {
-                Class | For | Fun | If | Print | Return | Var | While => break,
+                Class | For | Fun | If | Print | Return | Var | While | EOF => break,
                 Semicolon => {
                     self.advance();
                     break;
@@ -139,11 +152,11 @@ impl Parser {
             _ => None,
         };
 
-        let next = self.advance()?;
-        match next.token_type {
-            Semicolon => Ok(AstNode::DeclExpr { identifier, expr }),
-            _ => Err(Error::ExpectedSemicolon(var_token)),
-        }
+        self.expect_semicolon(
+            var_token.line,
+            var_token.token_type.to_string(),
+            Ok(AstNode::DeclExpr { identifier, expr }),
+        )
     }
 
     fn statement(&mut self) -> Result<AstNode> {
@@ -160,20 +173,25 @@ impl Parser {
     fn print_statement(&mut self) -> Result<AstNode> {
         let print_token = self.advance()?;
         let expr = self.expression()?;
-        let next = self.advance()?;
 
-        match next.token_type {
-            Semicolon => Ok(AstNode::PrintStmt(Box::new(expr))),
-            _ => Err(Error::ExpectedSemicolon(print_token)),
-        }
+        self.expect_semicolon(
+            print_token.line,
+            print_token.token_type.to_string(),
+            Ok(AstNode::PrintStmt(Box::new(expr))),
+        )
     }
 
     fn expr_statement(&mut self) -> Result<AstNode> {
         let expr = self.expression()?;
-        let next = self.advance()?;
-        match next.token_type {
-            Semicolon => Ok(AstNode::ExprStmt(Box::new(expr))),
-            _ => Err(Error::ExpectedSemicolon(next)),
+        let next = self.peek().cloned();
+        match next {
+            None => Err(Error::RanOutOfTokens),
+            Some(token) if matches!(token.token_type, EOF) => Err(Error::UnexpectedEOF),
+            Some(token) => self.expect_semicolon(
+                token.line,
+                "Expresion".into(),
+                Ok(AstNode::ExprStmt(Box::new(expr))),
+            ),
         }
     }
 
@@ -334,10 +352,7 @@ mod test {
         assert_eq!(
             AstNode::ProgInvalid {
                 stmts: vec![],
-                errors: vec![Error::ExpectedSemicolon(Token {
-                    token_type: EOF,
-                    line: 0
-                })]
+                errors: vec![Error::UnexpectedEOF]
             },
             expr
         );
@@ -811,10 +826,10 @@ mod test {
         assert_eq!(
             AstNode::ProgInvalid {
                 stmts: vec![],
-                errors: vec![Error::ExpectedSemicolon(Token {
+                errors: vec![Error::ExpectedSemicolon {
                     line: 0,
-                    token_type: Var
-                })]
+                    preceding: Var.to_string()
+                }]
             },
             expr
         );

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use super::tokenizer::Error;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,4 +60,15 @@ pub enum TokenType {
 
     Comment(String),
     Unrecognized(Error),
+}
+
+impl Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var => write!(f, "variable declearation"),
+            Self::Print => write!(f, "print statement"),
+            Self::EOF => write!(f, "end of file"),
+            _ => unimplemented!("Display not implemented for {:?}", self),
+        }
+    }
 }
