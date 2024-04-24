@@ -1,31 +1,29 @@
-#![allow(dead_code)]
-
 use std::io::Write;
 
 use crate::lox::type_system::LoxType;
 use crate::tree_walk::parser::AstNode::{self, *};
 use crate::tree_walk::token::{Token, TokenType};
 
+use super::state::Environment;
 use super::{Error, Result};
 
 pub struct Interpreter<'a> {
     // these enable redirecting output so that print can be tested
     output: Box<(dyn Write + 'a)>,
     err_output: Box<(dyn Write + 'a)>,
+    environment: Environment,
 }
 
 impl<'a> Interpreter<'a> {
     pub fn new() -> Self {
-        Self {
-            output: Box::new(std::io::stdout()),
-            err_output: Box::new(std::io::stderr()),
-        }
+        Self::new_with_output(Box::new(std::io::stdout()), Box::new(std::io::stderr()))
     }
 
     pub fn new_with_output(out: Box<dyn Write + 'a>, err_out: Box<dyn Write + 'a>) -> Self {
         Self {
             output: out,
             err_output: err_out,
+            environment: Environment::new(),
         }
     }
 
