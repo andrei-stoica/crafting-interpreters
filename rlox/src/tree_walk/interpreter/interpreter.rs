@@ -1,46 +1,12 @@
 #![allow(dead_code)]
 
-use std::{fmt::Display, io::Write};
+use std::io::Write;
 
-use crate::tree_walk::parser::{
-    AstNode::{self, *},
-    LiteralExpr,
-};
+use crate::lox::type_system::LoxType;
+use crate::tree_walk::parser::AstNode::{self, *};
 use crate::tree_walk::token::{Token, TokenType};
 
 use super::{Error, Result};
-
-// TODO: RetVal would make more sense as LoxType
-#[derive(Debug, PartialEq)]
-pub enum LoxType {
-    Number(f64),
-    Bool(bool),
-    String(std::string::String),
-    Nil,
-}
-
-impl From<LiteralExpr> for LoxType {
-    fn from(value: LiteralExpr) -> Self {
-        match value {
-            LiteralExpr::False => LoxType::Bool(false),
-            LiteralExpr::True => LoxType::Bool(true),
-            LiteralExpr::StringLit(s) => LoxType::String(s),
-            LiteralExpr::Number(n) => LoxType::Number(n),
-            LiteralExpr::Nil => LoxType::Nil,
-        }
-    }
-}
-
-impl Display for LoxType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Number(value) => write!(f, "{}", value),
-            Self::String(value) => write!(f, "{}", value),
-            Self::Bool(value) => write!(f, "{}", value),
-            Self::Nil => write!(f, "nil"),
-        }
-    }
-}
 
 pub struct Interpreter<'a> {
     // these enable redirecting output so that print can be tested
@@ -258,6 +224,7 @@ mod test {
     use std::{borrow::BorrowMut, cell::RefCell};
 
     use super::*;
+    use crate::tree_walk::parser::LiteralExpr;
 
     // NOTE: this is to test output of print statements in unit tests
     #[derive(Clone, Debug)]

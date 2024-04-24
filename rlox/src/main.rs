@@ -1,3 +1,4 @@
+mod lox;
 mod tree_walk;
 
 use tree_walk::interpreter::Interpreter;

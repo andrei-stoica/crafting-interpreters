@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use super::LoxType;
+use crate::lox::type_system::LoxType;
 use crate::tree_walk::token::Token;
 
 #[derive(Debug, PartialEq)]
