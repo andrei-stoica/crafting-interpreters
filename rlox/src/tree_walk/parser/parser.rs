@@ -11,7 +11,7 @@ pub enum AstNode {
     ExprStmt(Box<AstNode>),
     PrintStmt(Box<AstNode>),
     DeclExpr {
-        identifier: std::string::String,
+        identifier: Token,
         expr: Option<Box<AstNode>>,
     },
     BinaryExpr {
@@ -25,7 +25,7 @@ pub enum AstNode {
     },
     Literal(LiteralExpr),
     Grouping(Box<AstNode>),
-    Identifier(std::string::String),
+    Variable(Token),
 }
 
 #[derive(Debug, PartialEq)]
@@ -125,8 +125,8 @@ impl Parser {
     fn var_decleration(&mut self) -> Result<AstNode> {
         let var_token = self.advance()?;
         let next = self.advance()?;
-        let identifier = if let Identifier(name) = next.token_type {
-            name
+        let identifier = if matches!(next.token_type, Identifier(_)) {
+            next
         } else {
             return Err(Error::VarExpectedIdentifer(var_token));
         };
@@ -283,7 +283,7 @@ impl Parser {
             Number(n) => Ok(AstNode::Literal(LiteralExpr::Number(n.clone()))),
             String(s) => Ok(AstNode::Literal(LiteralExpr::StringLit(s.clone()))),
             LeftParen => Ok(self.grouping()?),
-            Identifier(name) => Ok(AstNode::Identifier(name)),
+            Identifier(_) => Ok(AstNode::Variable(token.clone())),
             EOF => Err(Error::UnexpectedEOF),
             _ => Err(Error::UnrecognizedExpression),
         }
@@ -712,7 +712,10 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::Prog(vec![AstNode::DeclExpr {
-                identifier: "this".into(),
+                identifier: Token {
+                    line: 0,
+                    token_type: Identifier("this".into()),
+                },
                 expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0))))
             }]),
             expr
@@ -739,7 +742,10 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::Prog(vec![AstNode::DeclExpr {
-                identifier: "this".into(),
+                identifier: Token {
+                    token_type: Identifier("this".into()),
+                    line: 0
+                },
                 expr: None,
             }]),
             expr

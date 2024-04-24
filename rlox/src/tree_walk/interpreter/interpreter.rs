@@ -75,14 +75,19 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_var_decl_stmt(
         &mut self,
-        identifier: String,
+        identifier: Token,
         expr: Option<Box<AstNode>>,
     ) -> Result<LoxType> {
+        let name = match identifier.token_type {
+            TokenType::Identifier(name) => name,
+            // this should only happen if I'm an idot
+            _ => return Err(Error::TokenIsNotAnIdenifier(identifier)),
+        };
         let expr_val = match expr {
             Some(expr) => self.evaluate(*expr)?,
             _ => LoxType::Nil,
         };
-        self.environment.state.insert(identifier, expr_val.clone());
+        self.environment.put(name, expr_val.clone());
         Ok(expr_val)
     }
 
@@ -897,7 +902,10 @@ mod test {
         let mut interpreter = Interpreter::new();
 
         let prog = AstNode::DeclExpr {
-            identifier: "test".into(),
+            identifier: Token {
+                token_type: TokenType::Identifier("test".into()),
+                line: 0,
+            },
             expr: Some(Box::new(Literal(LiteralExpr::Number(1.0)))),
         };
         let res = interpreter.evaluate(prog);
@@ -908,7 +916,10 @@ mod test {
         );
 
         let prog = AstNode::DeclExpr {
-            identifier: "test".into(),
+            identifier: Token {
+                token_type: TokenType::Identifier("test".into()),
+                line: 0,
+            },
             expr: None,
         };
         let res = interpreter.evaluate(prog);

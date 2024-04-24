@@ -9,6 +9,9 @@ pub enum Error {
         operator: Token,
         values: (LoxType, Option<LoxType>),
     },
+    TokenIsNotAnIdenifier(Token),
+    ExitingGlobalScope,
+    UndifinedVariable(String),
 }
 
 impl Display for Error {
@@ -24,6 +27,12 @@ impl Display for Error {
                     "[Line {}] {:?} not supported for {:?} {}",
                     operator.line, operator.token_type, values.0, second_value
                 )
+            }
+            Self::TokenIsNotAnIdenifier(token) => {
+                write!(f, "[Line {}] Token expect to be an identifier.", token.line)
+            }
+            Self::UndifinedVariable(name) => {
+                write!(f, "Undifined variable '{}'.", name)
             }
             _ => todo!(),
         }
