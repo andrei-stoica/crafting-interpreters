@@ -36,7 +36,7 @@ impl<'a> Interpreter<'a> {
             ExprStmt(stmt) => self.evaluate(*stmt),
             PrintStmt(expr) => self.evaluate_print_stmt(*expr),
             DeclExpr { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
-            Assign { target, value } => self.evaluate_assign(*target, *value),
+            Assign { target, value } => self.evaluate_assign_expr(*target, *value),
             BinaryExpr {
                 left,
                 operator,
@@ -91,7 +91,7 @@ impl<'a> Interpreter<'a> {
         Ok(expr_val)
     }
 
-    fn evaluate_assign(&mut self, target: AstNode, value: AstNode) -> Result<LoxType> {
+    fn evaluate_assign_expr(&mut self, target: AstNode, value: AstNode) -> Result<LoxType> {
         let res = self.evaluate(value)?;
         match target {
             Variable(name_token) => match name_token.token_type {
