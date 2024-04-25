@@ -44,6 +44,7 @@ impl<'a> Interpreter<'a> {
             } => self.evaluate_binary_expr(*left, operator, *right),
             UnaryExpr { operator, right } => self.evaluate_unary_expr(operator, *right),
             Grouping(expr) => self.evaluate(*expr),
+            Variable(token) => self.evaluate_variable_expr(token),
             Literal(expr) => Ok(expr.into()),
             _ => {
                 unimplemented!("Evaluating AstNode: {node:#?}");
@@ -246,6 +247,13 @@ impl<'a> Interpreter<'a> {
             LoxType::Nil => LoxType::Bool(false),
             LoxType::Bool(v) => LoxType::Bool(v),
             _ => LoxType::Bool(true),
+        }
+    }
+
+    fn evaluate_variable_expr(&mut self, token: Token) -> Result<LoxType> {
+        match token.token_type {
+            TokenType::Identifier(name) => self.environment.get(&name),
+            _ => unreachable!("Variable expresion should always be an identifier."),
         }
     }
 }
@@ -983,5 +991,121 @@ mod test {
             Some(LoxType::Number(1.0)),
             interpreter.environment.state.get("test").cloned()
         );
+    }
+
+    #[test]
+    fn test_variable_expr() {
+        let mut out_buf = SharedBuff(RefCell::new(Vec::<u8>::new()));
+        let mut err_buf = SharedBuff(RefCell::new(Vec::<u8>::new()));
+        {
+            let mut interpreter = Interpreter::new_with_output(
+                Box::new(out_buf.borrow_mut()),
+                Box::new(err_buf.borrow_mut()),
+            );
+
+            let prog = AstNode::PrintStmt(Box::new(AstNode::Variable(Token {
+                token_type: TokenType::Identifier("test".into()),
+                line: 0,
+            })));
+            let res = interpreter.evaluate(prog);
+            assert_eq!(Err(Error::UndifinedVariable("test".into())), res);
+            assert_eq!(None, interpreter.environment.state.get("test"));
+
+            let prog = AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    token_type: TokenType::Identifier("test".into()),
+                    line: 0,
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::StringLit(
+                    "should be a string".into(),
+                ))),
+            };
+            let res = interpreter.evaluate(prog);
+            assert_eq!(Err(Error::UndifinedVariable("test".into())), res);
+            assert_eq!(None, interpreter.environment.state.get("test").cloned());
+
+            let prog = AstNode::DeclExpr {
+                identifier: Token {
+                    token_type: TokenType::Identifier("test".into()),
+                    line: 0,
+                },
+                expr: Some(Box::new(AstNode::Literal(LiteralExpr::StringLit(
+                    "should be a string".into(),
+                )))),
+            };
+            let res = interpreter.evaluate(prog);
+            assert_eq!(Ok(LoxType::String("should be a string".into())), res);
+            assert_eq!(
+                Some(LoxType::String("should be a string".into())),
+                interpreter.environment.state.get("test").cloned()
+            );
+
+            let prog = AstNode::PrintStmt(Box::new(AstNode::Variable(Token {
+                token_type: TokenType::Identifier("test".into()),
+                line: 0,
+            })));
+            let _res = interpreter.evaluate(prog);
+        }
+        let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
+        assert_eq!("should be a string".to_string(), output);
+
+        out_buf.0.borrow_mut().clear();
+
+        {
+            let mut interpreter = Interpreter::new_with_output(
+                Box::new(out_buf.borrow_mut()),
+                Box::new(err_buf.borrow_mut()),
+            );
+            let prog = AstNode::Prog(vec![
+                AstNode::DeclExpr {
+                    identifier: Token {
+                        token_type: TokenType::Identifier("a".into()),
+                        line: 0,
+                    },
+                    expr: None,
+                },
+                AstNode::DeclExpr {
+                    identifier: Token {
+                        token_type: TokenType::Identifier("b".into()),
+                        line: 1,
+                    },
+                    expr: None,
+                },
+            ]);
+            let _res = interpreter.evaluate(prog);
+            assert_eq!(
+                Some(LoxType::Nil),
+                interpreter.environment.state.get("a").cloned()
+            );
+            assert_eq!(
+                Some(LoxType::Nil),
+                interpreter.environment.state.get("b").cloned()
+            );
+
+            let prog = PrintStmt(Box::new(Assign {
+                target: Box::new(Variable(Token {
+                    token_type: TokenType::Identifier("a".into()),
+                    line: 0,
+                })),
+                value: Box::new(Assign {
+                    target: Box::new(Variable(Token {
+                        token_type: TokenType::Identifier("b".into()),
+                        line: 0,
+                    })),
+                    value: Box::new(Literal(LiteralExpr::Number(1.0))),
+                }),
+            }));
+            let _res = interpreter.evaluate(prog);
+            assert_eq!(
+                Some(LoxType::Number(1.0)),
+                interpreter.environment.state.get("a").cloned()
+            );
+            assert_eq!(
+                Some(LoxType::Number(1.0)),
+                interpreter.environment.state.get("b").cloned()
+            );
+        }
+        let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
+        assert_eq!("1".to_string(), output);
     }
 }
