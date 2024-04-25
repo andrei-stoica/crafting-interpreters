@@ -10,6 +10,7 @@ pub enum Error {
         values: (LoxType, Option<LoxType>),
     },
     TokenIsNotAnIdenifier(Token),
+    AssignTargetNotVariable,
     ExitingGlobalScope,
     UndifinedVariable(String),
 }

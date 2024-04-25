@@ -12,6 +12,7 @@ pub enum Error {
     ExpectedClosingParen(Token),
     VarExpectedIdentifer(Token),
     VarExpectedEqual(Token),
+    InvalidAssignmentTarget(Token),
 }
 
 impl Display for Error {
@@ -32,6 +33,9 @@ impl Display for Error {
             }
             Self::VarExpectedEqual(token) => {
                 write!(f, "[line {}] Expected '=' after Identifer.", token.line)
+            }
+            Self::InvalidAssignmentTarget(token) => {
+                write!(f, "[line {}] Invalid assignment target.", token.line)
             }
             Self::UnexpectedEOF => write!(f, "Reached End of file unexpectedly."),
             _ => write!(f, "{:?}", self),

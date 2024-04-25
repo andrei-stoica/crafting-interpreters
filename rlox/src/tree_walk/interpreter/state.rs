@@ -41,4 +41,14 @@ impl Environment {
             None => Err(Error::UndifinedVariable(name.to_string())),
         }
     }
+
+    pub fn assign(&mut self, name: &str, value: LoxType) -> Result<LoxType> {
+        match self.state.contains_key(name.into()) {
+            true => {
+                self.state.insert(name.into(), value.clone());
+                Ok(value)
+            }
+            _ => Err(Error::UndifinedVariable(name.into())),
+        }
+    }
 }

@@ -36,6 +36,7 @@ impl<'a> Interpreter<'a> {
             ExprStmt(stmt) => self.evaluate(*stmt),
             PrintStmt(expr) => self.evaluate_print_stmt(*expr),
             DeclExpr { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
+            Assign { target, value } => self.evaluate_assign(*target, *value),
             BinaryExpr {
                 left,
                 operator,
@@ -45,8 +46,7 @@ impl<'a> Interpreter<'a> {
             Grouping(expr) => self.evaluate(*expr),
             Literal(expr) => Ok(expr.into()),
             _ => {
-                eprintln!("{node:#?}");
-                unimplemented!();
+                unimplemented!("Evaluating AstNode: {node:#?}");
             }
         }
     }
@@ -89,6 +89,20 @@ impl<'a> Interpreter<'a> {
         };
         self.environment.put(name, expr_val.clone());
         Ok(expr_val)
+    }
+
+    fn evaluate_assign(&mut self, target: AstNode, value: AstNode) -> Result<LoxType> {
+        let res = self.evaluate(value)?;
+        match target {
+            Variable(name_token) => match name_token.token_type {
+                TokenType::Identifier(name) => {
+                    self.environment.assign(&name, res.clone())?;
+                    Ok(res)
+                }
+                _ => Err(Error::TokenIsNotAnIdenifier(name_token)),
+            },
+            _ => unreachable!("Assign should only exist with a variable as target"),
+        }
     }
 
     fn evaluate_binary_expr(
@@ -926,6 +940,47 @@ mod test {
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
             Some(LoxType::Nil),
+            interpreter.environment.state.get("test").cloned()
+        );
+    }
+
+    #[test]
+    fn test_assign() {
+        let mut interpreter = Interpreter::new();
+
+        let prog = AstNode::DeclExpr {
+            identifier: Token {
+                token_type: TokenType::Identifier("test".into()),
+                line: 0,
+            },
+            expr: None,
+        };
+        let _ = interpreter.evaluate(prog);
+        assert_eq!(
+            Some(LoxType::Nil),
+            interpreter.environment.state.get("test").cloned()
+        );
+
+        let prog = AstNode::Assign {
+            target: Box::new(AstNode::Variable(Token {
+                token_type: TokenType::Identifier("not_valid".into()),
+                line: 0,
+            })),
+            value: Box::new(Literal(LiteralExpr::Number(1.0))),
+        };
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Err(Error::UndifinedVariable("not_valid".into())), res);
+
+        let prog = AstNode::Assign {
+            target: Box::new(AstNode::Variable(Token {
+                token_type: TokenType::Identifier("test".into()),
+                line: 0,
+            })),
+            value: Box::new(Literal(LiteralExpr::Number(1.0))),
+        };
+        let _ = interpreter.evaluate(prog);
+        assert_eq!(
+            Some(LoxType::Number(1.0)),
             interpreter.environment.state.get("test").cloned()
         );
     }

@@ -23,6 +23,10 @@ pub enum AstNode {
         operator: Token,
         right: Box<AstNode>,
     },
+    Assign {
+        target: Box<AstNode>,
+        value: Box<AstNode>,
+    },
     Literal(LiteralExpr),
     Grouping(Box<AstNode>),
     Variable(Token),
@@ -196,7 +200,28 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<AstNode> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<AstNode> {
+        let expr = self.equality()?;
+
+        match self.peek() {
+            Some(token) if matches!(token.token_type, Equal) => {
+                let _ = self.advance();
+                let equal = self.previous();
+                let value = self.assignment()?;
+
+                match &expr {
+                    AstNode::Variable(_) => Ok(AstNode::Assign {
+                        target: Box::new(expr),
+                        value: Box::new(value),
+                    }),
+                    _ => Err(Error::InvalidAssignmentTarget(equal)),
+                }
+            }
+            _ => Ok(expr),
+        }
     }
 
     fn equality(&mut self) -> Result<AstNode> {
@@ -831,6 +856,43 @@ mod test {
                     preceding: Var.to_string()
                 }]
             },
+            expr
+        );
+    }
+
+    #[test]
+    fn test_assignment() {
+        let tokens = vec![
+            Token {
+                token_type: Identifier("test".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Equal,
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    token_type: Identifier("test".into()),
+                    line: 0,
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))
+            }))]),
             expr
         );
     }
