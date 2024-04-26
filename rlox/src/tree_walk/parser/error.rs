@@ -10,6 +10,7 @@ pub enum Error {
     UnrecognizedExpression,
     ExpectedSemicolon { line: u32, preceding: String },
     ExpectedClosingParen(Token),
+    ExpectedClosingBrace(Token),
     VarExpectedIdentifer(Token),
     VarExpectedEqual(Token),
     InvalidAssignmentTarget(Token),
@@ -23,6 +24,9 @@ impl Display for Error {
             }
             Self::ExpectedClosingParen(token) => {
                 write!(f, "[line {}] Expected closing ')'.", token.line)
+            }
+            Self::ExpectedClosingBrace(token) => {
+                write!(f, "[line {}] Expected closing '}}'.", token.line)
             }
             Self::VarExpectedIdentifer(token) => {
                 write!(

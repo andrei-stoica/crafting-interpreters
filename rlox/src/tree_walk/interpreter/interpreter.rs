@@ -35,6 +35,7 @@ impl<'a> Interpreter<'a> {
             Prog(stmts) => self.evaluate_prog(stmts),
             ExprStmt(stmt) => self.evaluate(*stmt),
             PrintStmt(expr) => self.evaluate_print_stmt(*expr),
+            Block(exprs) => self.evaluate_block(exprs),
             DeclExpr { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
             Assign { target, value } => self.evaluate_assign_expr(*target, *value),
             BinaryExpr {
@@ -72,6 +73,26 @@ impl<'a> Interpreter<'a> {
         let write_res = self.output.write(output.as_bytes());
         assert!(write_res.is_ok());
         Ok(LoxType::Nil)
+    }
+
+    fn evaluate_block(&mut self, exprs: Vec<AstNode>) -> Result<LoxType> {
+        // NOTE: there's a lot of cloning in here, need to figure out how to do
+        // it without clone
+        self.environment = Environment::new_sub_envoronment(self.environment.clone());
+
+        let mut last_expr_res = Ok(LoxType::Nil);
+        for expr in exprs {
+            last_expr_res = self.evaluate(expr);
+            if matches!(last_expr_res, Err(_)) {
+                break;
+            }
+        }
+
+        self.environment = <Environment as Clone>::clone(&self.environment).exit()?;
+        match last_expr_res {
+            Err(e) => Err(e),
+            _ => Ok(LoxType::Nil),
+        }
     }
 
     fn evaluate_var_decl_stmt(
@@ -1107,5 +1128,76 @@ mod test {
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
         assert_eq!("1".to_string(), output);
+    }
+
+    #[test]
+    fn test_block_stmt() {
+        let mut interpreter = Interpreter::new();
+
+        let prog = AstNode::Block(vec![]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+
+        let prog = AstNode::Block(vec![AstNode::DeclExpr {
+            identifier: Token {
+                line: 1,
+                token_type: TokenType::Identifier("a".into()),
+            },
+            expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))),
+        }]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(None, interpreter.environment.state.get("a").cloned());
+
+        let prog = AstNode::DeclExpr {
+            identifier: Token {
+                line: 0,
+                token_type: TokenType::Identifier("a".into()),
+            },
+            expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))),
+        };
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Number(1.0)), res);
+        assert_eq!(
+            Some(LoxType::Number(1.0)),
+            interpreter.environment.state.get("a").cloned()
+        );
+
+        let prog = AstNode::Block(vec![AstNode::Assign {
+            target: Box::new(AstNode::Variable(Token {
+                token_type: TokenType::Identifier("a".into()),
+                line: 2,
+            })),
+            value: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
+        }]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(
+            Some(LoxType::Number(2.0)),
+            interpreter.environment.state.get("a").cloned()
+        );
+
+        let prog = AstNode::Block(vec![
+            AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    token_type: TokenType::Identifier("b".into()),
+                    line: 2,
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Number(3.0))),
+            },
+            AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    token_type: TokenType::Identifier("a".into()),
+                    line: 3,
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Number(3.0))),
+            },
+        ]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Err(Error::UndifinedVariable("b".into())), res);
+        assert_eq!(
+            Some(LoxType::Number(2.0)),
+            interpreter.environment.state.get("a").cloned()
+        );
     }
 }

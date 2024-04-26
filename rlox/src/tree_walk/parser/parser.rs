@@ -8,6 +8,7 @@ pub enum AstNode {
         stmts: Vec<AstNode>,
         errors: Vec<Error>,
     },
+    Block(Vec<AstNode>),
     ExprStmt(Box<AstNode>),
     PrintStmt(Box<AstNode>),
     DeclExpr {
@@ -40,6 +41,7 @@ pub enum LiteralExpr {
     Number(f64),
     StringLit(std::string::String),
 }
+
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
@@ -167,6 +169,7 @@ impl Parser {
         if let Some(token) = self.peek() {
             match token.token_type {
                 Print => self.print_statement(),
+                LeftBrace => self.block(),
                 _ => self.expr_statement(),
             }
         } else {
@@ -183,6 +186,23 @@ impl Parser {
             print_token.token_type.to_string(),
             Ok(AstNode::PrintStmt(Box::new(expr))),
         )
+    }
+
+    fn block(&mut self) -> Result<AstNode> {
+        let open_brace = self.advance()?;
+        let mut stmts = Vec::new();
+
+        while let Some(next) = self.peek() {
+            match next.token_type {
+                RightBrace | EOF => break,
+                _ => stmts.push(self.decleration()?),
+            }
+        }
+
+        match self.advance() {
+            Ok(token) if matches!(token.token_type, RightBrace) => Ok(AstNode::Block(stmts)),
+            _ => Err(Error::ExpectedClosingBrace(open_brace)),
+        }
     }
 
     fn expr_statement(&mut self) -> Result<AstNode> {
@@ -893,6 +913,121 @@ mod test {
                 })),
                 value: Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))
             }))]),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_block() {
+        let tokens = vec![
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(AstNode::Prog(vec![AstNode::Block(Vec::new())]), expr);
+
+        let tokens = vec![
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 2,
+            },
+            Token {
+                token_type: EOF,
+                line: 2,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::Block(vec![AstNode::PrintStmt(Box::new(
+                AstNode::Literal(LiteralExpr::Number(1.0))
+            ))])]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 2,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Vec::new(),
+                errors: vec![Error::ExpectedClosingBrace(Token {
+                    token_type: LeftBrace,
+                    line: 0,
+                })]
+            },
+            expr
+        );
+        let tokens = vec![
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 1,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 1,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 2,
+            },
+            Token {
+                token_type: EOF,
+                line: 2,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::Block(vec![AstNode::Block(Vec::new())])]),
             expr
         );
     }

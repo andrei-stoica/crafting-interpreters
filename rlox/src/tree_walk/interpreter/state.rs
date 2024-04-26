@@ -4,6 +4,7 @@ use crate::lox::type_system::LoxType;
 
 use super::{Error, Result};
 
+#[derive(Debug, Clone)]
 pub struct Environment {
     pub state: HashMap<String, LoxType>,
     pub enclosing: Option<Box<Environment>>,
@@ -38,7 +39,10 @@ impl Environment {
     pub fn get(&mut self, name: &str) -> Result<LoxType> {
         match self.state.get(name) {
             Some(value) => Ok(value.clone()),
-            None => Err(Error::UndifinedVariable(name.to_string())),
+            None => match &mut self.enclosing {
+                Some(enclosing_env) => enclosing_env.get(name),
+                None => Err(Error::UndifinedVariable(name.to_string())),
+            },
         }
     }
 
@@ -48,7 +52,10 @@ impl Environment {
                 self.state.insert(name.into(), value.clone());
                 Ok(value)
             }
-            _ => Err(Error::UndifinedVariable(name.into())),
+            _ => match &mut self.enclosing {
+                Some(enclosing_env) => enclosing_env.assign(name.into(), value.clone()),
+                _ => Err(Error::UndifinedVariable(name.into())),
+            },
         }
     }
 }
