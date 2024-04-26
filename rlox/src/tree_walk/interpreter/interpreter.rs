@@ -76,9 +76,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn evaluate_block(&mut self, exprs: Vec<AstNode>) -> Result<LoxType> {
-        // NOTE: there's a lot of cloning in here, need to figure out how to do
-        // it without clone
-        self.environment = Environment::new_sub_envoronment(self.environment.clone());
+        self.environment = Environment::new_sub_envoronment(&self.environment);
 
         let mut last_expr_res = Ok(LoxType::Nil);
         for expr in exprs {
@@ -88,7 +86,7 @@ impl<'a> Interpreter<'a> {
             }
         }
 
-        self.environment = <Environment as Clone>::clone(&self.environment).exit()?;
+        self.environment = self.environment.exit()?;
         match last_expr_res {
             Err(e) => Err(e),
             _ => Ok(LoxType::Nil),
