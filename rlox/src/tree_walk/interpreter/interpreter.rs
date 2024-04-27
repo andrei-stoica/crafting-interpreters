@@ -41,7 +41,7 @@ impl<'a> Interpreter<'a> {
                 else_stmt,
             } => self.evaluate_if_stmt(*condition, *then_stmt, else_stmt),
             Block(exprs) => self.evaluate_block(exprs),
-            DeclExpr { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
+            DeclStmt { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
             Assign { target, value } => self.evaluate_assign_expr(*target, *value),
             BinaryExpr {
                 left,
@@ -966,7 +966,7 @@ mod test {
     fn test_var_decl_stmt() {
         let mut interpreter = Interpreter::new();
 
-        let prog = AstNode::DeclExpr {
+        let prog = AstNode::DeclStmt {
             identifier: Token {
                 token_type: TokenType::Identifier("test".into()),
                 line: 0,
@@ -980,7 +980,7 @@ mod test {
             interpreter.environment.state.get("test").cloned()
         );
 
-        let prog = AstNode::DeclExpr {
+        let prog = AstNode::DeclStmt {
             identifier: Token {
                 token_type: TokenType::Identifier("test".into()),
                 line: 0,
@@ -999,7 +999,7 @@ mod test {
     fn test_assign() {
         let mut interpreter = Interpreter::new();
 
-        let prog = AstNode::DeclExpr {
+        let prog = AstNode::DeclStmt {
             identifier: Token {
                 token_type: TokenType::Identifier("test".into()),
                 line: 0,
@@ -1067,7 +1067,7 @@ mod test {
             assert_eq!(Err(Error::UndifinedVariable("test".into())), res);
             assert_eq!(None, interpreter.environment.state.get("test").cloned());
 
-            let prog = AstNode::DeclExpr {
+            let prog = AstNode::DeclStmt {
                 identifier: Token {
                     token_type: TokenType::Identifier("test".into()),
                     line: 0,
@@ -1100,14 +1100,14 @@ mod test {
                 Box::new(err_buf.borrow_mut()),
             );
             let prog = AstNode::Prog(vec![
-                AstNode::DeclExpr {
+                AstNode::DeclStmt {
                     identifier: Token {
                         token_type: TokenType::Identifier("a".into()),
                         line: 0,
                     },
                     expr: None,
                 },
-                AstNode::DeclExpr {
+                AstNode::DeclStmt {
                     identifier: Token {
                         token_type: TokenType::Identifier("b".into()),
                         line: 1,
@@ -1160,7 +1160,7 @@ mod test {
         let res = interpreter.evaluate(prog);
         assert_eq!(Ok(LoxType::Nil), res);
 
-        let prog = AstNode::Block(vec![AstNode::DeclExpr {
+        let prog = AstNode::Block(vec![AstNode::DeclStmt {
             identifier: Token {
                 line: 1,
                 token_type: TokenType::Identifier("a".into()),
@@ -1171,7 +1171,7 @@ mod test {
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(None, interpreter.environment.state.get("a").cloned());
 
-        let prog = AstNode::DeclExpr {
+        let prog = AstNode::DeclStmt {
             identifier: Token {
                 line: 0,
                 token_type: TokenType::Identifier("a".into()),
@@ -1227,7 +1227,7 @@ mod test {
     fn test_if_stmt() {
         let mut interpreter = Interpreter::new();
 
-        let prog = AstNode::Prog(vec![AstNode::DeclExpr {
+        let prog = AstNode::Prog(vec![AstNode::DeclStmt {
             identifier: Token {
                 line: 0,
                 token_type: TokenType::Identifier("a".into()),

@@ -8,16 +8,21 @@ pub enum AstNode {
         stmts: Vec<AstNode>,
         errors: Vec<Error>,
     },
-    PrintStmt(Box<AstNode>),
-    ExprStmt(Box<AstNode>),
+    DeclStmt {
+        identifier: Token,
+        expr: Option<Box<AstNode>>,
+    },
     IfStmt {
         condition: Box<AstNode>,
         then_stmt: Box<AstNode>,
         else_stmt: Option<Box<AstNode>>,
     },
-    DeclExpr {
-        identifier: Token,
-        expr: Option<Box<AstNode>>,
+    PrintStmt(Box<AstNode>),
+    Block(Vec<AstNode>),
+    ExprStmt(Box<AstNode>),
+    Assign {
+        target: Box<AstNode>,
+        value: Box<AstNode>,
     },
     BinaryExpr {
         left: Box<AstNode>,
@@ -28,14 +33,9 @@ pub enum AstNode {
         operator: Token,
         right: Box<AstNode>,
     },
-    Assign {
-        target: Box<AstNode>,
-        value: Box<AstNode>,
-    },
-    Block(Vec<AstNode>),
     Literal(LiteralExpr),
-    Grouping(Box<AstNode>),
     Variable(Token),
+    Grouping(Box<AstNode>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -167,7 +167,7 @@ impl Parser {
             _ => None,
         };
 
-        self.expect_semicolon(var_token, None, Ok(AstNode::DeclExpr { identifier, expr }))
+        self.expect_semicolon(var_token, None, Ok(AstNode::DeclStmt { identifier, expr }))
     }
 
     fn statement(&mut self) -> Result<AstNode> {
@@ -803,7 +803,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::DeclExpr {
+            AstNode::Prog(vec![AstNode::DeclStmt {
                 identifier: Token {
                     line: 0,
                     token_type: Identifier("this".into()),
@@ -833,7 +833,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::DeclExpr {
+            AstNode::Prog(vec![AstNode::DeclStmt {
                 identifier: Token {
                     token_type: Identifier("this".into()),
                     line: 0
