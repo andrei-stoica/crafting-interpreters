@@ -1,6 +1,16 @@
 use super::{Error, Result};
 use crate::tree_walk::token::{Token, TokenType::*};
 
+macro_rules! expect {
+    ($self:expr, $($token:path)+, $err:expr) => {{
+        let token = $self.peek().ok_or(Error::RanOutOfTokens)?;
+        match token.token_type {
+            $($token => Ok($self.advance()),)+
+            _ => Err($err),
+        }
+    }};
+}
+
 #[derive(Debug, PartialEq)]
 pub enum AstNode {
     Prog(Vec<AstNode>),
