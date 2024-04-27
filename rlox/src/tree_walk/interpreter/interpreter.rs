@@ -116,7 +116,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn evaluate_print_stmt(&mut self, expr: AstNode) -> Result<LoxType> {
-        let output = format!("{}", self.evaluate(expr)?);
+        let output = format!("{}\n", self.evaluate(expr)?);
         let write_res = self.output.write(output.as_bytes());
         assert!(write_res.is_ok());
         Ok(LoxType::Nil)
@@ -966,7 +966,7 @@ mod test {
             assert_eq!(Ok(LoxType::Nil), res);
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
-        assert_eq!("This is a string".to_string(), output);
+        assert_eq!("This is a string\n".to_string(), output);
     }
 
     #[test]
@@ -1097,7 +1097,7 @@ mod test {
             let _res = interpreter.evaluate(prog);
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
-        assert_eq!("should be a string".to_string(), output);
+        assert_eq!("should be a string\n".to_string(), output);
 
         out_buf.0.borrow_mut().clear();
 
@@ -1156,7 +1156,7 @@ mod test {
             );
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
-        assert_eq!("1".to_string(), output);
+        assert_eq!("1\n".to_string(), output);
     }
 
     #[test]
