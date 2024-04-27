@@ -228,9 +228,12 @@ impl Parser {
 
         let then_stmt = Box::new(self.statement()?);
 
-        let next = self.advance()?;
+        let next = self.peek().ok_or(Error::RanOutOfTokens)?;
         let else_stmt = match next.token_type {
-            Else => Some(Box::new(self.statement()?)),
+            Else => {
+                let _ = self.advance();
+                Some(Box::new(self.statement()?))
+            }
             _ => None,
         };
 
@@ -1177,6 +1180,67 @@ mod test {
                     LiteralExpr::False
                 ))))),
             }]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: If,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: Print,
+                line: 2,
+            },
+            Token {
+                token_type: False,
+                line: 2,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 2,
+            },
+            Token {
+                token_type: EOF,
+                line: 2,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![
+                AstNode::IfStmt {
+                    condition: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    then_stmt: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
+                        LiteralExpr::True
+                    )))),
+                    else_stmt: None,
+                },
+                AstNode::PrintStmt(Box::new(AstNode::Literal(LiteralExpr::False))),
+            ]),
             expr
         );
     }
