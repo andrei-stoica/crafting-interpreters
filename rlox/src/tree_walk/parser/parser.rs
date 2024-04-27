@@ -9,7 +9,6 @@ pub enum AstNode {
         errors: Vec<Error>,
     },
     PrintStmt(Box<AstNode>),
-    Block(Vec<AstNode>),
     ExprStmt(Box<AstNode>),
     IfStmt {
         condition: Box<AstNode>,
@@ -33,6 +32,7 @@ pub enum AstNode {
         target: Box<AstNode>,
         value: Box<AstNode>,
     },
+    Block(Vec<AstNode>),
     Literal(LiteralExpr),
     Grouping(Box<AstNode>),
     Variable(Token),
@@ -73,24 +73,27 @@ impl Parser {
         self.tokens[self.current - 1].clone()
     }
 
-    pub fn parse(&mut self) -> AstNode {
-        self.prog()
-    }
-
     fn report_error(error: &Error) {
         eprintln!("{}", error);
     }
 
     fn expect_semicolon(
         &mut self,
-        line: u32,
-        preceding: std::string::String,
+        token: Token,
+        preceding: Option<std::string::String>,
         ret_val: Result<AstNode>,
     ) -> Result<AstNode> {
         let next = self.advance()?;
         match next.token_type {
             Semicolon => ret_val,
-            _ => Err(Error::ExpectedSemicolon { line, preceding }),
+            _ => Err(Error::ExpectedSemicolon {
+                line: token.line,
+                preceding: if let Some(text) = preceding {
+                    text
+                } else {
+                    token.token_type.to_string()
+                },
+            }),
         }
     }
 
@@ -107,6 +110,10 @@ impl Parser {
                 }
             }
         }
+    }
+
+    pub fn parse(&mut self) -> AstNode {
+        self.prog()
     }
 
     fn prog(&mut self) -> AstNode {
@@ -136,13 +143,10 @@ impl Parser {
     }
 
     fn decleration(&mut self) -> Result<AstNode> {
-        if let Some(token) = self.peek() {
-            match token.token_type {
-                Var => self.var_decleration(),
-                _ => self.statement(),
-            }
-        } else {
-            Err(Error::RanOutOfTokens)
+        let token = self.peek().ok_or(Error::RanOutOfTokens)?;
+        match token.token_type {
+            Var => self.var_decleration(),
+            _ => self.statement(),
         }
     }
 
@@ -163,23 +167,16 @@ impl Parser {
             _ => None,
         };
 
-        self.expect_semicolon(
-            var_token.line,
-            var_token.token_type.to_string(),
-            Ok(AstNode::DeclExpr { identifier, expr }),
-        )
+        self.expect_semicolon(var_token, None, Ok(AstNode::DeclExpr { identifier, expr }))
     }
 
     fn statement(&mut self) -> Result<AstNode> {
-        if let Some(token) = self.peek() {
-            match token.token_type {
-                If => self.if_statemtnt(),
-                Print => self.print_statement(),
-                LeftBrace => self.block(),
-                _ => self.expr_statement(),
-            }
-        } else {
-            Err(Error::RanOutOfTokens)
+        let token = self.peek().ok_or(Error::RanOutOfTokens)?;
+        match token.token_type {
+            If => self.if_statemtnt(),
+            Print => self.print_statement(),
+            LeftBrace => self.block(),
+            _ => self.expr_statement(),
         }
     }
 
@@ -187,11 +184,7 @@ impl Parser {
         let print_token = self.advance()?;
         let expr = self.expression()?;
 
-        self.expect_semicolon(
-            print_token.line,
-            print_token.token_type.to_string(),
-            Ok(AstNode::PrintStmt(Box::new(expr))),
-        )
+        self.expect_semicolon(print_token, None, Ok(AstNode::PrintStmt(Box::new(expr))))
     }
 
     fn block(&mut self) -> Result<AstNode> {
@@ -251,8 +244,8 @@ impl Parser {
             None => Err(Error::RanOutOfTokens),
             Some(token) if matches!(token.token_type, EOF) => Err(Error::UnexpectedEOF),
             Some(token) => self.expect_semicolon(
-                token.line,
-                "Expresion".into(),
+                token,
+                Some("Expresion".into()),
                 Ok(AstNode::ExprStmt(Box::new(expr))),
             ),
         }
