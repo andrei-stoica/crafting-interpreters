@@ -250,26 +250,12 @@ impl<'a> Interpreter<'a> {
     }
 
     fn is_not_truthy(&self, value: LoxType) -> LoxType {
-        let v = match value {
-            LoxType::Bool(v) => v,
-            _ => {
-                if let LoxType::Bool(v) = self.is_truthy(value) {
-                    v
-                } else {
-                    unreachable!("All RetVal should be converted into Bool by this point")
-                }
-            }
-        };
-
+        let v: bool = value.into();
         LoxType::Bool(!v)
     }
 
     fn is_truthy(&self, value: LoxType) -> LoxType {
-        match value {
-            LoxType::Nil => LoxType::Bool(false),
-            LoxType::Bool(v) => LoxType::Bool(v),
-            _ => LoxType::Bool(true),
-        }
+        LoxType::Bool(value.into())
     }
 
     fn evaluate_unary_expr(&mut self, operator: Token, right: AstNode) -> Result<LoxType> {

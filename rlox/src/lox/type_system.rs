@@ -23,6 +23,16 @@ impl From<LiteralExpr> for LoxType {
     }
 }
 
+impl Into<bool> for LoxType {
+    fn into(self) -> bool {
+        match self {
+            LoxType::Nil => false,
+            LoxType::Bool(v) => v,
+            _ => true,
+        }
+    }
+}
+
 impl Display for LoxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
