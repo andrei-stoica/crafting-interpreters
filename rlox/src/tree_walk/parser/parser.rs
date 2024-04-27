@@ -11,7 +11,7 @@ macro_rules! expect {
     }};
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
     Prog(Vec<AstNode>),
     ProgInvalid {
@@ -28,6 +28,10 @@ pub enum AstNode {
         else_stmt: Option<Box<AstNode>>,
     },
     PrintStmt(Box<AstNode>),
+    WhileStmt {
+        condition: Box<AstNode>,
+        body: Box<AstNode>,
+    },
     Block(Vec<AstNode>),
     ExprStmt(Box<AstNode>),
     Assign {
@@ -53,7 +57,7 @@ pub enum AstNode {
     Grouping(Box<AstNode>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralExpr {
     False,
     True,
@@ -189,6 +193,7 @@ impl Parser {
         match token.token_type {
             If => self.if_statemtnt(),
             Print => self.print_statement(),
+            While => self.while_statement(),
             LeftBrace => self.block(),
             _ => self.expr_statement(),
         }
@@ -207,6 +212,26 @@ impl Parser {
             }
         )?;
         Ok(AstNode::PrintStmt(Box::new(expr)))
+    }
+
+    fn while_statement(&mut self) -> Result<AstNode> {
+        let while_token = self.advance()?;
+
+        let _ = expect!(
+            self,
+            LeftParen,
+            Error::ExpectedOpeningParen(while_token.clone())
+        )?;
+        let condition = Box::new(self.expression()?);
+        let _ = expect!(
+            self,
+            RightParen,
+            Error::ExpectedClosingParen(while_token.clone())
+        )?;
+
+        let body = Box::new(self.statement()?);
+
+        Ok(AstNode::WhileStmt { condition, body })
     }
 
     fn block(&mut self) -> Result<AstNode> {
@@ -1470,6 +1495,142 @@ mod test {
                     right: Box::new(AstNode::Literal(LiteralExpr::True)),
                 }),
             }))]),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_while_statement() {
+        let tokens = vec![
+            Token {
+                token_type: While,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 1,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::WhileStmt {
+                condition: Box::new(AstNode::Literal(LiteralExpr::True)),
+                body: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::True
+                ))))
+            }]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: While,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 1,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: vec![AstNode::PrintStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::True
+                )))],
+                errors: vec![Error::ExpectedOpeningParen(Token {
+                    token_type: While,
+                    line: 0
+                })],
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: While,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 1,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: vec![AstNode::PrintStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::True
+                )))],
+                errors: vec![Error::ExpectedClosingParen(Token {
+                    token_type: While,
+                    line: 0
+                })],
+            },
             expr
         );
     }

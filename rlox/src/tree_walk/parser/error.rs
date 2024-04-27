@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     RanOutOfTokens,
     UnexpectedEOF,
@@ -31,7 +31,11 @@ impl Display for Error {
                 )
             }
             Self::ExpectedClosingParen(token) => {
-                write!(f, "[line {}] Expected closing ')'.", token.line)
+                write!(
+                    f,
+                    "[line {}] Expected closing ')' after {}.",
+                    token.line, token.token_type
+                )
             }
             Self::ExpectedClosingBrace(token) => {
                 write!(f, "[line {}] Expected closing '}}'.", token.line)

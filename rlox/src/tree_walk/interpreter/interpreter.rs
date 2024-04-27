@@ -40,6 +40,7 @@ impl<'a> Interpreter<'a> {
                 else_stmt,
             } => self.evaluate_if_stmt(*condition, *then_stmt, else_stmt),
             PrintStmt(expr) => self.evaluate_print_stmt(*expr),
+            WhileStmt { condition, body } => self.evaluate_while_stmt(*condition, *body),
             Block(exprs) => self.evaluate_block(exprs),
             ExprStmt(stmt) => self.evaluate(*stmt),
             Assign { target, value } => self.evaluate_assign_expr(*target, *value),
@@ -119,6 +120,14 @@ impl<'a> Interpreter<'a> {
         let output = format!("{}\n", self.evaluate(expr)?);
         let write_res = self.output.write(output.as_bytes());
         assert!(write_res.is_ok());
+        Ok(LoxType::Nil)
+    }
+
+    fn evaluate_while_stmt(&mut self, condition: AstNode, stmt: AstNode) -> Result<LoxType> {
+        // NOTE: there is a lot of cloning here (especially for tight loops)
+        while self.evaluate(condition.clone())?.into() {
+            self.evaluate(stmt.clone())?;
+        }
         Ok(LoxType::Nil)
     }
 
@@ -1363,6 +1372,74 @@ mod test {
         }));
         let res = interpreter.evaluate(prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
-        //todo!()
+    }
+
+    #[test]
+    fn test_while_stmt() {
+        let mut out_buf = SharedBuff(RefCell::new(Vec::<u8>::new()));
+        let mut err_buf = SharedBuff(RefCell::new(Vec::<u8>::new()));
+        {
+            let mut interpreter = Interpreter::new_with_output(
+                Box::new(out_buf.borrow_mut()),
+                Box::new(err_buf.borrow_mut()),
+            );
+
+            let prog = DeclStmt {
+                identifier: Token {
+                    token_type: TokenType::Identifier("i".into()),
+                    line: 0,
+                },
+                expr: Some(Box::new(Literal(LiteralExpr::Number(0.0)))),
+            };
+            let _res = interpreter.evaluate(prog);
+            assert_eq!(
+                Some(LoxType::Number(0.0)),
+                interpreter.environment.state.get("i".into()).cloned()
+            );
+
+            let prog = WhileStmt {
+                condition: Box::new(BinaryExpr {
+                    left: Box::new(Variable(Token {
+                        token_type: TokenType::Identifier("i".into()),
+                        line: 0,
+                    })),
+                    operator: Token {
+                        token_type: TokenType::Less,
+                        line: 0,
+                    },
+                    right: Box::new(Literal(LiteralExpr::Number(4.0))),
+                }),
+                body: Box::new(Block(vec![
+                    PrintStmt(Box::new(Variable(Token {
+                        token_type: TokenType::Identifier("i".into()),
+                        line: 1,
+                    }))),
+                    Assign {
+                        target: Box::new(Variable(Token {
+                            token_type: TokenType::Identifier("i".into()),
+                            line: 1,
+                        })),
+                        value: Box::new(BinaryExpr {
+                            left: Box::new(Variable(Token {
+                                token_type: TokenType::Identifier("i".into()),
+                                line: 1,
+                            })),
+                            operator: Token {
+                                token_type: TokenType::Plus,
+                                line: 1,
+                            },
+                            right: Box::new(Literal(LiteralExpr::Number(1.0))),
+                        }),
+                    },
+                ])),
+            };
+            let _res = interpreter.evaluate(prog);
+            assert_eq!(
+                Some(LoxType::Number(4.0)),
+                interpreter.environment.state.get("i".into()).cloned()
+            );
+        }
+        let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
+        assert_eq!("0\n1\n2\n3\n".to_string(), output);
     }
 }

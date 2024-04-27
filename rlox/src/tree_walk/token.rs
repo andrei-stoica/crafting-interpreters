@@ -69,6 +69,8 @@ impl Display for TokenType {
             Self::Print => write!(f, "print statement"),
             Self::If => write!(f, "if"),
             Self::LeftParen => write!(f, "opeing paren"),
+            Self::RightParen => write!(f, "closing paren"),
+            Self::While => write!(f, "while statement"),
             Self::EOF => write!(f, "end of file"),
             _ => unimplemented!("Display not implemented for {:?}", self),
         }
