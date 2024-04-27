@@ -2,12 +2,12 @@ use super::{Error, Result};
 use crate::tree_walk::token::{Token, TokenType::*};
 
 macro_rules! expect {
-    ($self:expr, $($token:path)+, $err:expr) => {{
+    ($self:expr, $($token:pat)+, $err:expr) => {{
         let token = $self.peek().ok_or(Error::RanOutOfTokens)?;
         match token.token_type {
             $($token => Ok($self.advance()),)+
             _ => Err($err),
-        }
+        }?
     }};
 }
 
@@ -117,7 +117,7 @@ impl Parser {
             match token.token_type {
                 Class | For | Fun | If | Print | Return | Var | While | EOF => break,
                 Semicolon => {
-                    self.advance();
+                    let _ = self.advance();
                     break;
                 }
                 _ => {
@@ -167,16 +167,15 @@ impl Parser {
 
     fn var_decleration(&mut self) -> Result<AstNode> {
         let var_token = self.advance()?;
-        let next = self.advance()?;
-        let identifier = if matches!(next.token_type, Identifier(_)) {
-            next
-        } else {
-            return Err(Error::VarExpectedIdentifer(var_token));
-        };
+        let identifier = expect!(
+            self,
+            Identifier(_),
+            Error::VarExpectedIdentifer(var_token.clone())
+        )?;
         let next = self.peek();
         let expr = match next {
             Some(token) if token.token_type == Equal => {
-                self.advance();
+                let _ = self.advance();
                 Some(Box::new(self.expression()?))
             }
             _ => None,
@@ -199,7 +198,15 @@ impl Parser {
         let print_token = self.advance()?;
         let expr = self.expression()?;
 
-        self.expect_semicolon(print_token, None, Ok(AstNode::PrintStmt(Box::new(expr))))
+        let _ = expect!(
+            self,
+            Semicolon,
+            Error::ExpectedSemicolon {
+                line: print_token.line,
+                preceding: print_token.token_type.to_string()
+            }
+        )?;
+        Ok(AstNode::PrintStmt(Box::new(expr)))
     }
 
     fn block(&mut self) -> Result<AstNode> {
@@ -213,26 +220,20 @@ impl Parser {
             }
         }
 
-        match self.advance() {
-            Ok(token) if matches!(token.token_type, RightBrace) => Ok(AstNode::Block(stmts)),
-            _ => Err(Error::ExpectedClosingBrace(open_brace)),
-        }
+        let _ = expect!(self, RightBrace, Error::ExpectedClosingBrace(open_brace))?;
+        Ok(AstNode::Block(stmts))
     }
 
     fn if_statemtnt(&mut self) -> Result<AstNode> {
         let if_token = self.advance()?;
 
-        let opening = self.advance()?;
-        match opening.token_type {
-            LeftParen => (),
-            _ => return Err(Error::ExpectedOpeningParen(if_token)),
-        }
+        let _ = expect!(
+            self,
+            LeftParen,
+            Error::ExpectedOpeningParen(if_token.clone())
+        )?;
         let condition = Box::new(self.expression()?);
-        let closing = self.advance()?;
-        match closing.token_type {
-            RightParen => (),
-            _ => return Err(Error::ExpectedClosingParen(if_token)),
-        }
+        let _ = expect!(self, RightParen, Error::ExpectedClosingParen(if_token))?;
 
         let then_stmt = Box::new(self.statement()?);
 
@@ -258,11 +259,17 @@ impl Parser {
         match next {
             None => Err(Error::RanOutOfTokens),
             Some(token) if matches!(token.token_type, EOF) => Err(Error::UnexpectedEOF),
-            Some(token) => self.expect_semicolon(
-                token,
-                Some("Expresion".into()),
-                Ok(AstNode::ExprStmt(Box::new(expr))),
-            ),
+            Some(token) => {
+                let _ = expect!(
+                    self,
+                    Semicolon,
+                    Error::ExpectedSemicolon {
+                        line: token.line,
+                        preceding: "Expression".into()
+                    }
+                )?;
+                Ok(AstNode::ExprStmt(Box::new(expr)))
+            }
         }
     }
 
