@@ -33,15 +33,15 @@ impl<'a> Interpreter<'a> {
             // NOTE: statements returning values does not make sense, but I
             // will need to rewrite test to change
             Prog(stmts) => self.evaluate_prog(stmts),
-            ExprStmt(stmt) => self.evaluate(*stmt),
-            PrintStmt(expr) => self.evaluate_print_stmt(*expr),
+            DeclStmt { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
             IfStmt {
                 condition,
                 then_stmt,
                 else_stmt,
             } => self.evaluate_if_stmt(*condition, *then_stmt, else_stmt),
+            PrintStmt(expr) => self.evaluate_print_stmt(*expr),
             Block(exprs) => self.evaluate_block(exprs),
-            DeclStmt { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
+            ExprStmt(stmt) => self.evaluate(*stmt),
             Assign { target, value } => self.evaluate_assign_expr(*target, *value),
             BinaryExpr {
                 left,
@@ -49,9 +49,9 @@ impl<'a> Interpreter<'a> {
                 right,
             } => self.evaluate_binary_expr(*left, operator, *right),
             UnaryExpr { operator, right } => self.evaluate_unary_expr(operator, *right),
-            Grouping(expr) => self.evaluate(*expr),
-            Variable(token) => self.evaluate_variable_expr(token),
             Literal(expr) => Ok(expr.into()),
+            Variable(token) => self.evaluate_variable_expr(token),
+            Grouping(expr) => self.evaluate(*expr),
             _ => {
                 unimplemented!("Evaluating AstNode: {node:#?}");
             }
@@ -73,11 +73,22 @@ impl<'a> Interpreter<'a> {
         Ok(LoxType::Nil)
     }
 
-    fn evaluate_print_stmt(&mut self, expr: AstNode) -> Result<LoxType> {
-        let output = format!("{}", self.evaluate(expr)?);
-        let write_res = self.output.write(output.as_bytes());
-        assert!(write_res.is_ok());
-        Ok(LoxType::Nil)
+    fn evaluate_var_decl_stmt(
+        &mut self,
+        identifier: Token,
+        expr: Option<Box<AstNode>>,
+    ) -> Result<LoxType> {
+        let name = match identifier.token_type {
+            TokenType::Identifier(name) => name,
+            // this should only happen if I'm an idot
+            _ => return Err(Error::TokenIsNotAnIdenifier(identifier)),
+        };
+        let expr_val = match expr {
+            Some(expr) => self.evaluate(*expr)?,
+            _ => LoxType::Nil,
+        };
+        self.environment.put(name, expr_val.clone());
+        Ok(expr_val)
     }
 
     fn evaluate_if_stmt(
@@ -99,6 +110,13 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    fn evaluate_print_stmt(&mut self, expr: AstNode) -> Result<LoxType> {
+        let output = format!("{}", self.evaluate(expr)?);
+        let write_res = self.output.write(output.as_bytes());
+        assert!(write_res.is_ok());
+        Ok(LoxType::Nil)
+    }
+
     fn evaluate_block(&mut self, exprs: Vec<AstNode>) -> Result<LoxType> {
         self.environment = Environment::new_sub_envoronment(&self.environment);
 
@@ -115,24 +133,6 @@ impl<'a> Interpreter<'a> {
             Err(e) => Err(e),
             _ => Ok(LoxType::Nil),
         }
-    }
-
-    fn evaluate_var_decl_stmt(
-        &mut self,
-        identifier: Token,
-        expr: Option<Box<AstNode>>,
-    ) -> Result<LoxType> {
-        let name = match identifier.token_type {
-            TokenType::Identifier(name) => name,
-            // this should only happen if I'm an idot
-            _ => return Err(Error::TokenIsNotAnIdenifier(identifier)),
-        };
-        let expr_val = match expr {
-            Some(expr) => self.evaluate(*expr)?,
-            _ => LoxType::Nil,
-        };
-        self.environment.put(name, expr_val.clone());
-        Ok(expr_val)
     }
 
     fn evaluate_assign_expr(&mut self, target: AstNode, value: AstNode) -> Result<LoxType> {
@@ -249,27 +249,6 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_unary_expr(&mut self, operator: Token, right: AstNode) -> Result<LoxType> {
-        let right_val = self.evaluate(right)?;
-        match operator.token_type {
-            TokenType::Minus => {
-                if let LoxType::Number(n) = right_val {
-                    Ok(LoxType::Number(-n))
-                } else {
-                    Err(Error::OperationNotSuported {
-                        operator,
-                        values: (right_val, None),
-                    })
-                }
-            }
-            TokenType::Bang => Ok(self.is_not_truthy(right_val)),
-            _ => {
-                eprintln!("{operator:#?}");
-                unimplemented!();
-            }
-        }
-    }
-
     fn is_not_truthy(&self, value: LoxType) -> LoxType {
         let v = match value {
             LoxType::Bool(v) => v,
@@ -290,6 +269,27 @@ impl<'a> Interpreter<'a> {
             LoxType::Nil => LoxType::Bool(false),
             LoxType::Bool(v) => LoxType::Bool(v),
             _ => LoxType::Bool(true),
+        }
+    }
+
+    fn evaluate_unary_expr(&mut self, operator: Token, right: AstNode) -> Result<LoxType> {
+        let right_val = self.evaluate(right)?;
+        match operator.token_type {
+            TokenType::Minus => {
+                if let LoxType::Number(n) = right_val {
+                    Ok(LoxType::Number(-n))
+                } else {
+                    Err(Error::OperationNotSuported {
+                        operator,
+                        values: (right_val, None),
+                    })
+                }
+            }
+            TokenType::Bang => Ok(self.is_not_truthy(right_val)),
+            _ => {
+                eprintln!("{operator:#?}");
+                unimplemented!();
+            }
         }
     }
 
