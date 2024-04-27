@@ -35,6 +35,11 @@ impl<'a> Interpreter<'a> {
             Prog(stmts) => self.evaluate_prog(stmts),
             ExprStmt(stmt) => self.evaluate(*stmt),
             PrintStmt(expr) => self.evaluate_print_stmt(*expr),
+            IfStmt {
+                condition,
+                then_stmt,
+                else_stmt,
+            } => self.evaluate_if_stmt(*condition, *then_stmt, else_stmt),
             Block(exprs) => self.evaluate_block(exprs),
             DeclExpr { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
             Assign { target, value } => self.evaluate_assign_expr(*target, *value),
@@ -73,6 +78,25 @@ impl<'a> Interpreter<'a> {
         let write_res = self.output.write(output.as_bytes());
         assert!(write_res.is_ok());
         Ok(LoxType::Nil)
+    }
+
+    fn evaluate_if_stmt(
+        &mut self,
+        condition: AstNode,
+        then_stmt: AstNode,
+        else_stmt: Option<Box<AstNode>>,
+    ) -> Result<LoxType> {
+        let cond = self.evaluate(condition)?;
+        match self.is_truthy(cond) {
+            LoxType::Bool(cond) => match cond {
+                true => self.evaluate(then_stmt),
+                false => match else_stmt {
+                    Some(stmt) => self.evaluate(*stmt),
+                    _ => Ok(LoxType::Nil),
+                },
+            },
+            _ => unreachable!("is_truthy() should only return LoxType::Bool()"),
+        }
     }
 
     fn evaluate_block(&mut self, exprs: Vec<AstNode>) -> Result<LoxType> {
@@ -1196,6 +1220,100 @@ mod test {
         assert_eq!(
             Some(LoxType::Number(2.0)),
             interpreter.environment.state.get("a").cloned()
+        );
+    }
+
+    #[test]
+    fn test_if_stmt() {
+        let mut interpreter = Interpreter::new();
+
+        let prog = AstNode::Prog(vec![AstNode::DeclExpr {
+            identifier: Token {
+                line: 0,
+                token_type: TokenType::Identifier("a".into()),
+            },
+            expr: None,
+        }]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(
+            Some(LoxType::Nil),
+            interpreter.environment.state.get("a".into()).cloned()
+        );
+
+        let prog = AstNode::Prog(vec![AstNode::IfStmt {
+            condition: Box::new(AstNode::Literal(LiteralExpr::True)),
+            then_stmt: Box::new(AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    line: 1,
+                    token_type: TokenType::Identifier("a".into()),
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
+            }),
+            else_stmt: Some(Box::new(AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    line: 1,
+                    token_type: TokenType::Identifier("a".into()),
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
+            })),
+        }]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(
+            Some(LoxType::Number(1.0)),
+            interpreter.environment.state.get("a".into()).cloned()
+        );
+
+        let prog = AstNode::Prog(vec![AstNode::IfStmt {
+            condition: Box::new(AstNode::Literal(LiteralExpr::False)),
+            then_stmt: Box::new(AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    line: 1,
+                    token_type: TokenType::Identifier("a".into()),
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
+            }),
+            else_stmt: Some(Box::new(AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    line: 1,
+                    token_type: TokenType::Identifier("a".into()),
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
+            })),
+        }]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(
+            Some(LoxType::Number(2.0)),
+            interpreter.environment.state.get("a".into()).cloned()
+        );
+
+        let prog = AstNode::Prog(vec![
+            AstNode::Assign {
+                target: Box::new(AstNode::Variable(Token {
+                    line: 1,
+                    token_type: TokenType::Identifier("a".into()),
+                })),
+                value: Box::new(AstNode::Literal(LiteralExpr::Nil)),
+            },
+            AstNode::IfStmt {
+                condition: Box::new(AstNode::Literal(LiteralExpr::False)),
+                then_stmt: Box::new(AstNode::Assign {
+                    target: Box::new(AstNode::Variable(Token {
+                        line: 1,
+                        token_type: TokenType::Identifier("a".into()),
+                    })),
+                    value: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
+                }),
+                else_stmt: None,
+            },
+        ]);
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(
+            Some(LoxType::Nil),
+            interpreter.environment.state.get("a".into()).cloned()
         );
     }
 }

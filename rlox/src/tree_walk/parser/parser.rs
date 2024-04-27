@@ -8,9 +8,14 @@ pub enum AstNode {
         stmts: Vec<AstNode>,
         errors: Vec<Error>,
     },
+    PrintStmt(Box<AstNode>),
     Block(Vec<AstNode>),
     ExprStmt(Box<AstNode>),
-    PrintStmt(Box<AstNode>),
+    IfStmt {
+        condition: Box<AstNode>,
+        then_stmt: Box<AstNode>,
+        else_stmt: Option<Box<AstNode>>,
+    },
     DeclExpr {
         identifier: Token,
         expr: Option<Box<AstNode>>,
@@ -168,6 +173,7 @@ impl Parser {
     fn statement(&mut self) -> Result<AstNode> {
         if let Some(token) = self.peek() {
             match token.token_type {
+                If => self.if_statemtnt(),
                 Print => self.print_statement(),
                 LeftBrace => self.block(),
                 _ => self.expr_statement(),
@@ -203,6 +209,36 @@ impl Parser {
             Ok(token) if matches!(token.token_type, RightBrace) => Ok(AstNode::Block(stmts)),
             _ => Err(Error::ExpectedClosingBrace(open_brace)),
         }
+    }
+
+    fn if_statemtnt(&mut self) -> Result<AstNode> {
+        let if_token = self.advance()?;
+
+        let opening = self.advance()?;
+        match opening.token_type {
+            LeftParen => (),
+            _ => return Err(Error::ExpectedOpeningParen(if_token)),
+        }
+        let condition = Box::new(self.expression()?);
+        let closing = self.advance()?;
+        match closing.token_type {
+            RightParen => (),
+            _ => return Err(Error::ExpectedClosingParen(if_token)),
+        }
+
+        let then_stmt = Box::new(self.statement()?);
+
+        let next = self.advance()?;
+        let else_stmt = match next.token_type {
+            Else => Some(Box::new(self.statement()?)),
+            _ => None,
+        };
+
+        Ok(AstNode::IfStmt {
+            condition,
+            then_stmt,
+            else_stmt,
+        })
     }
 
     fn expr_statement(&mut self) -> Result<AstNode> {
@@ -1028,6 +1064,119 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::Prog(vec![AstNode::Block(vec![AstNode::Block(Vec::new())])]),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_if_statement() {
+        let tokens = vec![
+            Token {
+                token_type: If,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 2,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::IfStmt {
+                condition: Box::new(AstNode::Literal(LiteralExpr::True)),
+                then_stmt: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::True
+                )))),
+                else_stmt: None,
+            }]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: If,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Print,
+                line: 1,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: Else,
+                line: 2,
+            },
+            Token {
+                token_type: Print,
+                line: 2,
+            },
+            Token {
+                token_type: False,
+                line: 2,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 2,
+            },
+            Token {
+                token_type: EOF,
+                line: 2,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::IfStmt {
+                condition: Box::new(AstNode::Literal(LiteralExpr::True)),
+                then_stmt: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::True
+                )))),
+                else_stmt: Some(Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::False
+                ))))),
+            }]),
             expr
         );
     }

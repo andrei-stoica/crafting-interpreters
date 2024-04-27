@@ -67,6 +67,8 @@ impl Display for TokenType {
         match self {
             Self::Var => write!(f, "variable declearation"),
             Self::Print => write!(f, "print statement"),
+            Self::If => write!(f, "if"),
+            Self::LeftParen => write!(f, "opeing paren"),
             Self::EOF => write!(f, "end of file"),
             _ => unimplemented!("Display not implemented for {:?}", self),
         }

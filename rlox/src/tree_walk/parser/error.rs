@@ -9,6 +9,7 @@ pub enum Error {
     UnexpectedEOF,
     UnrecognizedExpression,
     ExpectedSemicolon { line: u32, preceding: String },
+    ExpectedOpeningParen(Token),
     ExpectedClosingParen(Token),
     ExpectedClosingBrace(Token),
     VarExpectedIdentifer(Token),
@@ -21,6 +22,13 @@ impl Display for Error {
         match self {
             Self::ExpectedSemicolon { line, preceding } => {
                 write!(f, "[line {}] Expected ';' after {}.", line, preceding)
+            }
+            Self::ExpectedClosingParen(token) => {
+                write!(
+                    f,
+                    "[line {}] Expected ')' after {}.",
+                    token.line, token.token_type
+                )
             }
             Self::ExpectedClosingParen(token) => {
                 write!(f, "[line {}] Expected closing ')'.", token.line)
