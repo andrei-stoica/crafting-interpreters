@@ -24,6 +24,11 @@ pub enum AstNode {
         target: Box<AstNode>,
         value: Box<AstNode>,
     },
+    LogicalExpr {
+        left: Box<AstNode>,
+        operator: Token,
+        right: Box<AstNode>,
+    },
     BinaryExpr {
         left: Box<AstNode>,
         operator: Token,
@@ -256,12 +261,11 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<AstNode> {
-        let expr = self.equality()?;
+        let expr = self.logic_or()?;
 
         match self.peek() {
             Some(token) if matches!(token.token_type, Equal) => {
-                let _ = self.advance();
-                let equal = self.previous();
+                let equal = self.advance()?;
                 let value = self.assignment()?;
 
                 match &expr {
@@ -274,6 +278,48 @@ impl Parser {
             }
             _ => Ok(expr),
         }
+    }
+
+    fn logic_or(&mut self) -> Result<AstNode> {
+        let mut expr = self.logic_and()?;
+
+        while let Some(token) = self.peek() {
+            match token.token_type {
+                Or => {
+                    let or = self.advance()?;
+                    let right = Box::new(self.logic_and()?);
+
+                    expr = AstNode::LogicalExpr {
+                        left: Box::new(expr),
+                        operator: or,
+                        right,
+                    };
+                }
+                _ => break,
+            }
+        }
+        Ok(expr)
+    }
+
+    fn logic_and(&mut self) -> Result<AstNode> {
+        let mut expr = self.equality()?;
+
+        while let Some(token) = self.peek() {
+            match token.token_type {
+                And => {
+                    let and = self.advance()?;
+                    let right = Box::new(self.equality()?);
+
+                    expr = AstNode::LogicalExpr {
+                        left: Box::new(expr),
+                        operator: and,
+                        right,
+                    };
+                }
+                _ => break,
+            }
+        }
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result<AstNode> {
@@ -1234,6 +1280,179 @@ mod test {
                 },
                 AstNode::PrintStmt(Box::new(AstNode::Literal(LiteralExpr::False))),
             ]),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_logical_expr() {
+        let tokens = vec![
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Or,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
+                left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                operator: Token {
+                    line: 0,
+                    token_type: Or
+                },
+                right: Box::new(AstNode::Literal(LiteralExpr::True)),
+            }))]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: And,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
+                left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                operator: Token {
+                    line: 0,
+                    token_type: And
+                },
+                right: Box::new(AstNode::Literal(LiteralExpr::True)),
+            }))]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: And,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Or,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
+                left: Box::new(AstNode::LogicalExpr {
+                    left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    operator: Token {
+                        line: 0,
+                        token_type: And
+                    },
+                    right: Box::new(AstNode::Literal(LiteralExpr::True)),
+                }),
+                operator: Token {
+                    line: 0,
+                    token_type: Or
+                },
+                right: Box::new(AstNode::Literal(LiteralExpr::True)),
+            }))]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Or,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: And,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
+                left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                operator: Token {
+                    line: 0,
+                    token_type: Or
+                },
+                right: Box::new(AstNode::LogicalExpr {
+                    left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    operator: Token {
+                        line: 0,
+                        token_type: And
+                    },
+                    right: Box::new(AstNode::Literal(LiteralExpr::True)),
+                }),
+            }))]),
             expr
         );
     }

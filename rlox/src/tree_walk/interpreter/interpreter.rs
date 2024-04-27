@@ -43,6 +43,11 @@ impl<'a> Interpreter<'a> {
             Block(exprs) => self.evaluate_block(exprs),
             ExprStmt(stmt) => self.evaluate(*stmt),
             Assign { target, value } => self.evaluate_assign_expr(*target, *value),
+            LogicalExpr {
+                left,
+                operator,
+                right,
+            } => self.evaluate_logical_expr(*left, operator, *right),
             BinaryExpr {
                 left,
                 operator,
@@ -146,6 +151,22 @@ impl<'a> Interpreter<'a> {
                 _ => Err(Error::TokenIsNotAnIdenifier(name_token)),
             },
             _ => unreachable!("Assign should only exist with a variable as target"),
+        }
+    }
+
+    fn evaluate_logical_expr(
+        &mut self,
+        left: AstNode,
+        operator: Token,
+        right: AstNode,
+    ) -> Result<LoxType> {
+        let left_val = self.evaluate(left)?;
+        let truthy = left_val.clone().into();
+
+        match operator.token_type {
+            TokenType::Or if truthy => Ok(left_val),
+            TokenType::And if !truthy => Ok(left_val),
+            _ => Ok(self.evaluate(right)?),
         }
     }
 
@@ -1301,5 +1322,47 @@ mod test {
             Some(LoxType::Nil),
             interpreter.environment.state.get("a".into()).cloned()
         );
+    }
+
+    #[test]
+    fn test_logical_expr() {
+        let mut interpreter = Interpreter::new();
+
+        let prog = AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
+            left: Box::new(AstNode::Literal(LiteralExpr::True)),
+            operator: Token {
+                line: 0,
+                token_type: TokenType::Or,
+            },
+            right: Box::new(AstNode::LogicalExpr {
+                left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                operator: Token {
+                    line: 0,
+                    token_type: TokenType::And,
+                },
+                right: Box::new(AstNode::Literal(LiteralExpr::True)),
+            }),
+        }));
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
+
+        let prog = AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
+            right: Box::new(AstNode::Literal(LiteralExpr::True)),
+            operator: Token {
+                line: 0,
+                token_type: TokenType::Or,
+            },
+            left: Box::new(AstNode::LogicalExpr {
+                left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                operator: Token {
+                    line: 0,
+                    token_type: TokenType::And,
+                },
+                right: Box::new(AstNode::Literal(LiteralExpr::True)),
+            }),
+        }));
+        let res = interpreter.evaluate(prog);
+        assert_eq!(Ok(LoxType::Bool(true)), res);
+        //todo!()
     }
 }
