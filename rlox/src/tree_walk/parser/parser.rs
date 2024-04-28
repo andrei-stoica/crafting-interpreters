@@ -192,6 +192,7 @@ impl Parser {
         let token = self.peek().ok_or(Error::RanOutOfTokens)?;
         match token.token_type {
             If => self.if_statemtnt(),
+            For => self.for_statement(),
             Print => self.print_statement(),
             While => self.while_statement(),
             LeftBrace => self.block(),
@@ -276,6 +277,67 @@ impl Parser {
             then_stmt,
             else_stmt,
         })
+    }
+
+    fn for_statement(&mut self) -> Result<AstNode> {
+        let for_token = self.advance()?;
+        let _ = expect!(
+            self,
+            LeftParen,
+            Error::ExpectedOpeningParen(for_token.clone())
+        )?;
+        let next = self.peek().ok_or(Error::RanOutOfTokens)?;
+        let initializer = match next.token_type {
+            Semicolon => {
+                self.advance()?;
+                None
+            }
+            Var => Some(self.var_decleration()?),
+            _ => Some(self.expr_statement()?),
+        };
+
+        let next = self.peek().ok_or(Error::RanOutOfTokens)?;
+        let cond_expr = match next.token_type {
+            Semicolon => None,
+            _ => Some(self.expression()?),
+        };
+        let _ = expect!(
+            self,
+            Semicolon,
+            Error::ExpectedSemicolon {
+                line: for_token.line,
+                preceding: for_token.token_type.to_string()
+            }
+        );
+
+        let next = self.peek().ok_or(Error::RanOutOfTokens)?;
+        let increment = match next.token_type {
+            RightParen => None,
+            _ => Some(self.expression()?),
+        };
+        let _ = expect!(self, RightParen, Error::ExpectedClosingParen(for_token))?;
+
+        let mut body = self.statement()?;
+
+        body = match increment {
+            Some(stmt) => AstNode::Block(vec![body, stmt]),
+            _ => body,
+        };
+
+        let condition = match cond_expr {
+            Some(expr) => expr,
+            None => AstNode::Literal(LiteralExpr::True),
+        };
+
+        let while_stmt = AstNode::WhileStmt {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        };
+
+        match initializer {
+            Some(stmt) => Ok(AstNode::Block(vec![stmt, while_stmt])),
+            None => Ok(while_stmt),
+        }
     }
 
     fn expr_statement(&mut self) -> Result<AstNode> {
@@ -1631,6 +1693,345 @@ mod test {
                     line: 0
                 })],
             },
+            expr
+        );
+    }
+
+    #[test]
+    fn test_for_statement() {
+        let tokens = vec![
+            Token {
+                token_type: For,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 1,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::WhileStmt {
+                condition: Box::new(AstNode::Literal(LiteralExpr::True)),
+                body: Box::new(AstNode::ExprStmt(Box::new(AstNode::Literal(
+                    LiteralExpr::True
+                ))))
+            }]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: For,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Var,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("i".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Equal,
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 1,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::Block(vec![
+                AstNode::DeclStmt {
+                    identifier: Token {
+                        token_type: Identifier("i".into()),
+                        line: 0,
+                    },
+                    expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0))))
+                },
+                AstNode::WhileStmt {
+                    condition: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    body: Box::new(AstNode::ExprStmt(Box::new(AstNode::Literal(
+                        LiteralExpr::True
+                    ))))
+                }
+            ])]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: For,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Var,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("i".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Equal,
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("i".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LessEqual,
+                line: 0,
+            },
+            Token {
+                token_type: Number(3.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 1,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::Block(vec![
+                AstNode::DeclStmt {
+                    identifier: Token {
+                        token_type: Identifier("i".into()),
+                        line: 0,
+                    },
+                    expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0))))
+                },
+                AstNode::WhileStmt {
+                    condition: Box::new(AstNode::BinaryExpr {
+                        left: Box::new(AstNode::Variable(Token {
+                            token_type: Identifier("i".into()),
+                            line: 0,
+                        },)),
+                        operator: Token {
+                            token_type: LessEqual,
+                            line: 0,
+                        },
+                        right: Box::new(AstNode::Literal(LiteralExpr::Number(3.0)))
+                    }),
+                    body: Box::new(AstNode::ExprStmt(Box::new(AstNode::Literal(
+                        LiteralExpr::True
+                    ))))
+                }
+            ])]),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: For,
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Var,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("i".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Equal,
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("i".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LessEqual,
+                line: 0,
+            },
+            Token {
+                token_type: Number(3.0),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("i".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Equal,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("i".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Plus,
+                line: 0,
+            },
+            Token {
+                token_type: Number(1.0),
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: True,
+                line: 1,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 1,
+            },
+            Token {
+                token_type: EOF,
+                line: 1,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(vec![AstNode::Block(vec![
+                AstNode::DeclStmt {
+                    identifier: Token {
+                        token_type: Identifier("i".into()),
+                        line: 0,
+                    },
+                    expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0))))
+                },
+                AstNode::WhileStmt {
+                    condition: Box::new(AstNode::BinaryExpr {
+                        left: Box::new(AstNode::Variable(Token {
+                            token_type: Identifier("i".into()),
+                            line: 0,
+                        },)),
+                        operator: Token {
+                            token_type: LessEqual,
+                            line: 0,
+                        },
+                        right: Box::new(AstNode::Literal(LiteralExpr::Number(3.0)))
+                    }),
+                    body: Box::new(AstNode::Block(vec![
+                        AstNode::ExprStmt(Box::new(AstNode::Literal(LiteralExpr::True))),
+                        AstNode::Assign {
+                            target: Box::new(AstNode::Variable(Token {
+                                token_type: Identifier("i".into()),
+                                line: 0,
+                            })),
+                            value: Box::new(AstNode::BinaryExpr {
+                                left: Box::new(AstNode::Variable(Token {
+                                    token_type: Identifier("i".into()),
+                                    line: 0,
+                                })),
+                                operator: Token {
+                                    token_type: Plus,
+                                    line: 0,
+                                },
+                                right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))
+                            })
+                        }
+                    ]))
+                }
+            ])]),
             expr
         );
     }
