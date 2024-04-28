@@ -6,7 +6,7 @@ use super::{Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Environment {
-    pub state: HashMap<String, LoxType>,
+    pub state: HashMap<Box<str>, LoxType>,
     pub enclosing: Option<Box<Environment>>,
 }
 
@@ -34,7 +34,7 @@ impl Environment {
         }
     }
 
-    pub fn put(&mut self, name: String, value: LoxType) {
+    pub fn put(&mut self, name: Box<str>, value: LoxType) {
         self.state.insert(name, value);
     }
 

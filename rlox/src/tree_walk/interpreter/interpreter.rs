@@ -28,44 +28,44 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn evaluate(&mut self, node: AstNode) -> Result<LoxType> {
+    pub fn evaluate(&mut self, node: &AstNode) -> Result<LoxType> {
         match node {
             // NOTE: statements returning values does not make sense, but I
             // will need to rewrite test to change
-            Prog(stmts) => self.evaluate_prog(stmts),
+            Prog(stmts) => self.evaluate_prog(&stmts),
             DeclStmt { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
             IfStmt {
                 condition,
                 then_stmt,
                 else_stmt,
-            } => self.evaluate_if_stmt(*condition, *then_stmt, else_stmt),
-            PrintStmt(expr) => self.evaluate_print_stmt(*expr),
-            WhileStmt { condition, body } => self.evaluate_while_stmt(*condition, *body),
+            } => self.evaluate_if_stmt(condition, then_stmt, else_stmt),
+            PrintStmt(expr) => self.evaluate_print_stmt(expr),
+            WhileStmt { condition, body } => self.evaluate_while_stmt(condition, body),
             Block(exprs) => self.evaluate_block(exprs),
-            ExprStmt(stmt) => self.evaluate(*stmt),
-            Assign { target, value } => self.evaluate_assign_expr(*target, *value),
+            ExprStmt(stmt) => self.evaluate(stmt),
+            Assign { target, value } => self.evaluate_assign_expr(target, value),
             LogicalExpr {
                 left,
                 operator,
                 right,
-            } => self.evaluate_logical_expr(*left, operator, *right),
+            } => self.evaluate_logical_expr(left, operator, right),
             BinaryExpr {
                 left,
                 operator,
                 right,
-            } => self.evaluate_binary_expr(*left, operator, *right),
-            UnaryExpr { operator, right } => self.evaluate_unary_expr(operator, *right),
+            } => self.evaluate_binary_expr(left, operator, right),
+            UnaryExpr { operator, right } => self.evaluate_unary_expr(operator, right),
             Literal(expr) => Ok(expr.into()),
             Variable(token) => self.evaluate_variable_expr(token),
-            Grouping(expr) => self.evaluate(*expr),
+            Grouping(expr) => self.evaluate(expr),
             _ => {
                 unimplemented!("Evaluating AstNode: {node:#?}");
             }
         }
     }
 
-    fn evaluate_prog(&mut self, stmts: Vec<AstNode>) -> Result<LoxType> {
-        for stmt in stmts {
+    fn evaluate_prog(&mut self, stmts: &Box<[AstNode]>) -> Result<LoxType> {
+        for stmt in stmts.iter() {
             match self.evaluate(stmt) {
                 Err(err) => {
                     let msg = format!("{}", err);
@@ -81,34 +81,34 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_var_decl_stmt(
         &mut self,
-        identifier: Token,
-        expr: Option<Box<AstNode>>,
+        identifier: &Token,
+        expr: &Option<Box<AstNode>>,
     ) -> Result<LoxType> {
-        let name = match identifier.token_type {
+        let name = match &identifier.token_type {
             TokenType::Identifier(name) => name,
             // this should only happen if I'm an idot
-            _ => return Err(Error::TokenIsNotAnIdenifier(identifier)),
+            _ => return Err(Error::TokenIsNotAnIdenifier(identifier.clone())),
         };
         let expr_val = match expr {
-            Some(expr) => self.evaluate(*expr)?,
+            Some(expr) => self.evaluate(expr)?,
             _ => LoxType::Nil,
         };
-        self.environment.put(name, expr_val.clone());
+        self.environment.put(name.clone(), expr_val.clone());
         Ok(expr_val)
     }
 
     fn evaluate_if_stmt(
         &mut self,
-        condition: AstNode,
-        then_stmt: AstNode,
-        else_stmt: Option<Box<AstNode>>,
+        condition: &AstNode,
+        then_stmt: &AstNode,
+        else_stmt: &Option<Box<AstNode>>,
     ) -> Result<LoxType> {
         let cond = self.evaluate(condition)?;
         match self.is_truthy(cond) {
             LoxType::Bool(cond) => match cond {
                 true => self.evaluate(then_stmt),
                 false => match else_stmt {
-                    Some(stmt) => self.evaluate(*stmt),
+                    Some(stmt) => self.evaluate(stmt),
                     _ => Ok(LoxType::Nil),
                 },
             },
@@ -116,26 +116,25 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_print_stmt(&mut self, expr: AstNode) -> Result<LoxType> {
+    fn evaluate_print_stmt(&mut self, expr: &AstNode) -> Result<LoxType> {
         let output = format!("{}\n", self.evaluate(expr)?);
         let write_res = self.output.write(output.as_bytes());
         assert!(write_res.is_ok());
         Ok(LoxType::Nil)
     }
 
-    fn evaluate_while_stmt(&mut self, condition: AstNode, stmt: AstNode) -> Result<LoxType> {
-        // NOTE: there is a lot of cloning here (especially for tight loops)
-        while self.evaluate(condition.clone())?.into() {
-            self.evaluate(stmt.clone())?;
+    fn evaluate_while_stmt(&mut self, condition: &AstNode, stmt: &AstNode) -> Result<LoxType> {
+        while self.evaluate(condition)?.into() {
+            self.evaluate(stmt)?;
         }
         Ok(LoxType::Nil)
     }
 
-    fn evaluate_block(&mut self, exprs: Vec<AstNode>) -> Result<LoxType> {
+    fn evaluate_block(&mut self, exprs: &Box<[AstNode]>) -> Result<LoxType> {
         self.environment = Environment::new_sub_envoronment(&self.environment);
 
         let mut last_expr_res = Ok(LoxType::Nil);
-        for expr in exprs {
+        for expr in exprs.iter() {
             last_expr_res = self.evaluate(expr);
             if matches!(last_expr_res, Err(_)) {
                 break;
@@ -149,15 +148,15 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_assign_expr(&mut self, target: AstNode, value: AstNode) -> Result<LoxType> {
+    fn evaluate_assign_expr(&mut self, target: &AstNode, value: &AstNode) -> Result<LoxType> {
         let res = self.evaluate(value)?;
         match target {
-            Variable(name_token) => match name_token.token_type {
+            Variable(name_token) => match &name_token.token_type {
                 TokenType::Identifier(name) => {
                     self.environment.assign(&name, res.clone())?;
                     Ok(res)
                 }
-                _ => Err(Error::TokenIsNotAnIdenifier(name_token)),
+                _ => Err(Error::TokenIsNotAnIdenifier(name_token.clone())),
             },
             _ => unreachable!("Assign should only exist with a variable as target"),
         }
@@ -165,9 +164,9 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_logical_expr(
         &mut self,
-        left: AstNode,
-        operator: Token,
-        right: AstNode,
+        left: &AstNode,
+        operator: &Token,
+        right: &AstNode,
     ) -> Result<LoxType> {
         let left_val = self.evaluate(left)?;
         let truthy = left_val.clone().into();
@@ -181,9 +180,9 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_binary_expr(
         &mut self,
-        left: AstNode,
-        operator: Token,
-        right: AstNode,
+        left: &AstNode,
+        operator: &Token,
+        right: &AstNode,
     ) -> Result<LoxType> {
         let left_val = self.evaluate(left)?;
         let right_val = self.evaluate(right)?;
@@ -191,8 +190,8 @@ impl<'a> Interpreter<'a> {
             TokenType::Plus => match (left_val, right_val) {
                 (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Number(l + r)),
                 (LoxType::String(l), LoxType::String(r)) => {
-                    let val = [l.as_str(), r.as_str()].concat();
-                    Ok(LoxType::String(val))
+                    let val = [l, r].concat();
+                    Ok(LoxType::String(val.into()))
                 }
                 (left_val, right_val) => Err(Error::OperationNotSuported {
                     operator: operator.clone(),
@@ -224,7 +223,7 @@ impl<'a> Interpreter<'a> {
                 (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l > r)),
                 (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l > r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
-                    operator,
+                    operator: operator.clone(),
                     values: (left_val, Some(right_val)),
                 }),
             },
@@ -232,7 +231,7 @@ impl<'a> Interpreter<'a> {
                 (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l >= r)),
                 (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l >= r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
-                    operator,
+                    operator: operator.clone(),
                     values: (left_val, Some(right_val)),
                 }),
             },
@@ -240,7 +239,7 @@ impl<'a> Interpreter<'a> {
                 (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l < r)),
                 (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l < r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
-                    operator,
+                    operator: operator.clone(),
                     values: (left_val, Some(right_val)),
                 }),
             },
@@ -248,7 +247,7 @@ impl<'a> Interpreter<'a> {
                 (LoxType::Number(l), LoxType::Number(r)) => Ok(LoxType::Bool(l <= r)),
                 (LoxType::String(l), LoxType::String(r)) => Ok(LoxType::Bool(l <= r)),
                 (left_val, right_val) => Err(Error::OperationNotSuported {
-                    operator,
+                    operator: operator.clone(),
                     values: (left_val, Some(right_val)),
                 }),
             },
@@ -288,7 +287,7 @@ impl<'a> Interpreter<'a> {
         LoxType::Bool(value.into())
     }
 
-    fn evaluate_unary_expr(&mut self, operator: Token, right: AstNode) -> Result<LoxType> {
+    fn evaluate_unary_expr(&mut self, operator: &Token, right: &AstNode) -> Result<LoxType> {
         let right_val = self.evaluate(right)?;
         match operator.token_type {
             TokenType::Minus => {
@@ -296,7 +295,7 @@ impl<'a> Interpreter<'a> {
                     Ok(LoxType::Number(-n))
                 } else {
                     Err(Error::OperationNotSuported {
-                        operator,
+                        operator: operator.clone(),
                         values: (right_val, None),
                     })
                 }
@@ -309,8 +308,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_variable_expr(&mut self, token: Token) -> Result<LoxType> {
-        match token.token_type {
+    fn evaluate_variable_expr(&mut self, token: &Token) -> Result<LoxType> {
+        match &token.token_type {
             TokenType::Identifier(name) => self.environment.get(&name),
             _ => unreachable!("Variable expresion should always be an identifier."),
         }
@@ -343,8 +342,8 @@ mod test {
     #[test]
     fn test_arithmitic_expr() {
         let mut interpreter = Interpreter::new();
-        let prog = AstNode::Prog(vec![]);
-        let _ = interpreter.evaluate(prog);
+        let prog = AstNode::Prog(Box::new([]));
+        let _ = interpreter.evaluate(&prog);
 
         let prog = AstNode::BinaryExpr {
             left: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
@@ -354,7 +353,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(3.0)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
@@ -365,7 +364,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(-1.0)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
@@ -376,7 +375,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(0.5)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
@@ -393,7 +392,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(-0.5)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
@@ -404,7 +403,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         }));
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(4.0)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
@@ -415,7 +414,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         }));
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::String("AB".into())), res);
     }
 
@@ -432,7 +431,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -443,7 +442,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -454,7 +453,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -465,7 +464,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -476,7 +475,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -487,7 +486,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -498,7 +497,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -509,7 +508,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Nil)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -520,7 +519,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -531,7 +530,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -542,7 +541,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(0.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -555,7 +554,7 @@ mod test {
                 "this is a string".into(),
             ))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // BangEqual
@@ -567,7 +566,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -578,7 +577,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -589,7 +588,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -600,7 +599,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -611,7 +610,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -622,7 +621,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -633,7 +632,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // Greater
@@ -645,7 +644,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -656,7 +655,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -667,7 +666,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -678,7 +677,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -689,7 +688,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -700,7 +699,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         // GreaterEqual
@@ -712,7 +711,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -723,7 +722,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -734,7 +733,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -745,7 +744,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -756,7 +755,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -767,7 +766,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         // Less
@@ -779,7 +778,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -790,7 +789,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -801,7 +800,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -812,7 +811,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -823,7 +822,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -834,7 +833,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // LessEqual
@@ -846,7 +845,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("B".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -857,7 +856,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -868,7 +867,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::StringLit("A".into()))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -879,7 +878,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -890,7 +889,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::BinaryExpr {
@@ -901,7 +900,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         // Unary negate
@@ -912,7 +911,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::False)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::UnaryExpr {
@@ -922,7 +921,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::True)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::UnaryExpr {
@@ -932,7 +931,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Nil)),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::UnaryExpr {
@@ -942,7 +941,7 @@ mod test {
             },
             right: Box::new(AstNode::Literal(LiteralExpr::Number(0.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
 
         let prog = AstNode::UnaryExpr {
@@ -954,7 +953,7 @@ mod test {
                 "This is a string".into(),
             ))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(false)), res);
     }
 
@@ -971,7 +970,7 @@ mod test {
             let prog = AstNode::PrintStmt(Box::new(AstNode::Literal(LiteralExpr::StringLit(
                 "This is a string".into(),
             ))));
-            let res = interpreter.evaluate(prog);
+            let res = interpreter.evaluate(&prog);
             assert_eq!(Ok(LoxType::Nil), res);
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
@@ -989,7 +988,7 @@ mod test {
             },
             expr: Some(Box::new(Literal(LiteralExpr::Number(1.0)))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(1.0)), res);
         assert_eq!(
             Some(LoxType::Number(1.0)),
@@ -1003,7 +1002,7 @@ mod test {
             },
             expr: None,
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
             Some(LoxType::Nil),
@@ -1022,7 +1021,7 @@ mod test {
             },
             expr: None,
         };
-        let _ = interpreter.evaluate(prog);
+        let _ = interpreter.evaluate(&prog);
         assert_eq!(
             Some(LoxType::Nil),
             interpreter.environment.state.get("test").cloned()
@@ -1035,7 +1034,7 @@ mod test {
             })),
             value: Box::new(Literal(LiteralExpr::Number(1.0))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Err(Error::UndifinedVariable("not_valid".into())), res);
 
         let prog = AstNode::Assign {
@@ -1045,7 +1044,7 @@ mod test {
             })),
             value: Box::new(Literal(LiteralExpr::Number(1.0))),
         };
-        let _ = interpreter.evaluate(prog);
+        let _ = interpreter.evaluate(&prog);
         assert_eq!(
             Some(LoxType::Number(1.0)),
             interpreter.environment.state.get("test").cloned()
@@ -1066,7 +1065,7 @@ mod test {
                 token_type: TokenType::Identifier("test".into()),
                 line: 0,
             })));
-            let res = interpreter.evaluate(prog);
+            let res = interpreter.evaluate(&prog);
             assert_eq!(Err(Error::UndifinedVariable("test".into())), res);
             assert_eq!(None, interpreter.environment.state.get("test"));
 
@@ -1079,7 +1078,7 @@ mod test {
                     "should be a string".into(),
                 ))),
             };
-            let res = interpreter.evaluate(prog);
+            let res = interpreter.evaluate(&prog);
             assert_eq!(Err(Error::UndifinedVariable("test".into())), res);
             assert_eq!(None, interpreter.environment.state.get("test").cloned());
 
@@ -1092,7 +1091,7 @@ mod test {
                     "should be a string".into(),
                 )))),
             };
-            let res = interpreter.evaluate(prog);
+            let res = interpreter.evaluate(&prog);
             assert_eq!(Ok(LoxType::String("should be a string".into())), res);
             assert_eq!(
                 Some(LoxType::String("should be a string".into())),
@@ -1103,7 +1102,7 @@ mod test {
                 token_type: TokenType::Identifier("test".into()),
                 line: 0,
             })));
-            let _res = interpreter.evaluate(prog);
+            let _res = interpreter.evaluate(&prog);
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
         assert_eq!("should be a string\n".to_string(), output);
@@ -1115,7 +1114,7 @@ mod test {
                 Box::new(out_buf.borrow_mut()),
                 Box::new(err_buf.borrow_mut()),
             );
-            let prog = AstNode::Prog(vec![
+            let prog = AstNode::Prog(Box::new([
                 AstNode::DeclStmt {
                     identifier: Token {
                         token_type: TokenType::Identifier("a".into()),
@@ -1130,8 +1129,8 @@ mod test {
                     },
                     expr: None,
                 },
-            ]);
-            let _res = interpreter.evaluate(prog);
+            ]));
+            let _res = interpreter.evaluate(&prog);
             assert_eq!(
                 Some(LoxType::Nil),
                 interpreter.environment.state.get("a").cloned()
@@ -1154,7 +1153,7 @@ mod test {
                     value: Box::new(Literal(LiteralExpr::Number(1.0))),
                 }),
             }));
-            let _res = interpreter.evaluate(prog);
+            let _res = interpreter.evaluate(&prog);
             assert_eq!(
                 Some(LoxType::Number(1.0)),
                 interpreter.environment.state.get("a").cloned()
@@ -1172,18 +1171,18 @@ mod test {
     fn test_block_stmt() {
         let mut interpreter = Interpreter::new();
 
-        let prog = AstNode::Block(vec![]);
-        let res = interpreter.evaluate(prog);
+        let prog = AstNode::Block(Box::new([]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
 
-        let prog = AstNode::Block(vec![AstNode::DeclStmt {
+        let prog = AstNode::Block(Box::new([AstNode::DeclStmt {
             identifier: Token {
                 line: 1,
                 token_type: TokenType::Identifier("a".into()),
             },
             expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))),
-        }]);
-        let res = interpreter.evaluate(prog);
+        }]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(None, interpreter.environment.state.get("a").cloned());
 
@@ -1194,28 +1193,28 @@ mod test {
             },
             expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))),
         };
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(1.0)), res);
         assert_eq!(
             Some(LoxType::Number(1.0)),
             interpreter.environment.state.get("a").cloned()
         );
 
-        let prog = AstNode::Block(vec![AstNode::Assign {
+        let prog = AstNode::Block(Box::new([AstNode::Assign {
             target: Box::new(AstNode::Variable(Token {
                 token_type: TokenType::Identifier("a".into()),
                 line: 2,
             })),
             value: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
-        }]);
-        let res = interpreter.evaluate(prog);
+        }]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
             Some(LoxType::Number(2.0)),
             interpreter.environment.state.get("a").cloned()
         );
 
-        let prog = AstNode::Block(vec![
+        let prog = AstNode::Block(Box::new([
             AstNode::Assign {
                 target: Box::new(AstNode::Variable(Token {
                     token_type: TokenType::Identifier("b".into()),
@@ -1230,8 +1229,8 @@ mod test {
                 })),
                 value: Box::new(AstNode::Literal(LiteralExpr::Number(3.0))),
             },
-        ]);
-        let res = interpreter.evaluate(prog);
+        ]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Err(Error::UndifinedVariable("b".into())), res);
         assert_eq!(
             Some(LoxType::Number(2.0)),
@@ -1243,21 +1242,21 @@ mod test {
     fn test_if_stmt() {
         let mut interpreter = Interpreter::new();
 
-        let prog = AstNode::Prog(vec![AstNode::DeclStmt {
+        let prog = AstNode::Prog(Box::new([AstNode::DeclStmt {
             identifier: Token {
                 line: 0,
                 token_type: TokenType::Identifier("a".into()),
             },
             expr: None,
-        }]);
-        let res = interpreter.evaluate(prog);
+        }]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
             Some(LoxType::Nil),
             interpreter.environment.state.get("a".into()).cloned()
         );
 
-        let prog = AstNode::Prog(vec![AstNode::IfStmt {
+        let prog = AstNode::Prog(Box::new([AstNode::IfStmt {
             condition: Box::new(AstNode::Literal(LiteralExpr::True)),
             then_stmt: Box::new(AstNode::Assign {
                 target: Box::new(AstNode::Variable(Token {
@@ -1273,15 +1272,15 @@ mod test {
                 })),
                 value: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
             })),
-        }]);
-        let res = interpreter.evaluate(prog);
+        }]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
             Some(LoxType::Number(1.0)),
             interpreter.environment.state.get("a".into()).cloned()
         );
 
-        let prog = AstNode::Prog(vec![AstNode::IfStmt {
+        let prog = AstNode::Prog(Box::new([AstNode::IfStmt {
             condition: Box::new(AstNode::Literal(LiteralExpr::False)),
             then_stmt: Box::new(AstNode::Assign {
                 target: Box::new(AstNode::Variable(Token {
@@ -1297,15 +1296,15 @@ mod test {
                 })),
                 value: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
             })),
-        }]);
-        let res = interpreter.evaluate(prog);
+        }]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
             Some(LoxType::Number(2.0)),
             interpreter.environment.state.get("a".into()).cloned()
         );
 
-        let prog = AstNode::Prog(vec![
+        let prog = AstNode::Prog(Box::new([
             AstNode::Assign {
                 target: Box::new(AstNode::Variable(Token {
                     line: 1,
@@ -1324,8 +1323,8 @@ mod test {
                 }),
                 else_stmt: None,
             },
-        ]);
-        let res = interpreter.evaluate(prog);
+        ]));
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
             Some(LoxType::Nil),
@@ -1352,7 +1351,7 @@ mod test {
                 right: Box::new(AstNode::Literal(LiteralExpr::True)),
             }),
         }));
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
 
         let prog = AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
@@ -1370,7 +1369,7 @@ mod test {
                 right: Box::new(AstNode::Literal(LiteralExpr::True)),
             }),
         }));
-        let res = interpreter.evaluate(prog);
+        let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Bool(true)), res);
     }
 
@@ -1391,7 +1390,7 @@ mod test {
                 },
                 expr: Some(Box::new(Literal(LiteralExpr::Number(0.0)))),
             };
-            let _res = interpreter.evaluate(prog);
+            let _res = interpreter.evaluate(&prog);
             assert_eq!(
                 Some(LoxType::Number(0.0)),
                 interpreter.environment.state.get("i".into()).cloned()
@@ -1409,7 +1408,7 @@ mod test {
                     },
                     right: Box::new(Literal(LiteralExpr::Number(4.0))),
                 }),
-                body: Box::new(Block(vec![
+                body: Box::new(Block(Box::new([
                     PrintStmt(Box::new(Variable(Token {
                         token_type: TokenType::Identifier("i".into()),
                         line: 1,
@@ -1431,9 +1430,9 @@ mod test {
                             right: Box::new(Literal(LiteralExpr::Number(1.0))),
                         }),
                     },
-                ])),
+                ]))),
             };
-            let _res = interpreter.evaluate(prog);
+            let _res = interpreter.evaluate(&prog);
             assert_eq!(
                 Some(LoxType::Number(4.0)),
                 interpreter.environment.state.get("i".into()).cloned()

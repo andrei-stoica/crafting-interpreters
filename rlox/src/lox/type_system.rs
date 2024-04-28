@@ -7,17 +7,17 @@ use std::fmt::Display;
 pub enum LoxType {
     Number(f64),
     Bool(bool),
-    String(std::string::String),
+    String(Box<str>),
     Nil,
 }
 
-impl From<LiteralExpr> for LoxType {
-    fn from(value: LiteralExpr) -> Self {
+impl From<&LiteralExpr> for LoxType {
+    fn from(value: &LiteralExpr) -> Self {
         match value {
             LiteralExpr::False => LoxType::Bool(false),
             LiteralExpr::True => LoxType::Bool(true),
-            LiteralExpr::StringLit(s) => LoxType::String(s),
-            LiteralExpr::Number(n) => LoxType::Number(n),
+            LiteralExpr::StringLit(s) => LoxType::String(s.clone()),
+            LiteralExpr::Number(n) => LoxType::Number(n.clone()),
             LiteralExpr::Nil => LoxType::Nil,
         }
     }

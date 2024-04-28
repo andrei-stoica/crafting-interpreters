@@ -13,5 +13,5 @@ fn main() {
     let root = Parser::new(tokenizer.tokens).parse();
 
     println!();
-    let _ = interpreter.evaluate(root);
+    let _ = interpreter.evaluate(&root);
 }

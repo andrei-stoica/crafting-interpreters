@@ -34,8 +34,8 @@ pub enum TokenType {
     LessEqual,
 
     // literals
-    Identifier(String),
-    String(String),
+    Identifier(Box<str>),
+    String(Box<str>),
     Number(f64),
 
     // keywords
@@ -58,7 +58,7 @@ pub enum TokenType {
 
     EOF,
 
-    Comment(String),
+    Comment(Box<str>),
     Unrecognized(Error),
 }
 

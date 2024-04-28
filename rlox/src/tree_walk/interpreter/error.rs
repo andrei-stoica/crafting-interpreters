@@ -13,6 +13,7 @@ pub enum Error {
     AssignTargetNotVariable,
     ExitingGlobalScope,
     UndifinedVariable(String),
+    ConditionNotBool,
 }
 
 impl Display for Error {

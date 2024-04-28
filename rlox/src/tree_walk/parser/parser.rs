@@ -13,10 +13,10 @@ macro_rules! expect {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
-    Prog(Vec<AstNode>),
+    Prog(Box<[AstNode]>),
     ProgInvalid {
-        stmts: Vec<AstNode>,
-        errors: Vec<Error>,
+        stmts: Box<[AstNode]>,
+        errors: Box<[Error]>,
     },
     DeclStmt {
         identifier: Token,
@@ -32,7 +32,7 @@ pub enum AstNode {
         condition: Box<AstNode>,
         body: Box<AstNode>,
     },
-    Block(Vec<AstNode>),
+    Block(Box<[AstNode]>),
     ExprStmt(Box<AstNode>),
     Assign {
         target: Box<AstNode>,
@@ -63,7 +63,7 @@ pub enum LiteralExpr {
     True,
     Nil,
     Number(f64),
-    StringLit(std::string::String),
+    StringLit(Box<str>),
 }
 
 pub struct Parser {
@@ -156,8 +156,11 @@ impl Parser {
         }
 
         match invalid {
-            false => AstNode::Prog(stmts),
-            true => AstNode::ProgInvalid { stmts, errors },
+            false => AstNode::Prog(stmts.into()),
+            true => AstNode::ProgInvalid {
+                stmts: stmts.into(),
+                errors: errors.into(),
+            },
         }
     }
 
@@ -247,7 +250,7 @@ impl Parser {
         }
 
         let _ = expect!(self, RightBrace, Error::ExpectedClosingBrace(open_brace))?;
-        Ok(AstNode::Block(stmts))
+        Ok(AstNode::Block(stmts.into()))
     }
 
     fn if_statemtnt(&mut self) -> Result<AstNode> {
@@ -320,7 +323,7 @@ impl Parser {
         let mut body = self.statement()?;
 
         body = match increment {
-            Some(stmt) => AstNode::Block(vec![body, stmt]),
+            Some(stmt) => AstNode::Block(Box::new([body, stmt])),
             _ => body,
         };
 
@@ -335,7 +338,7 @@ impl Parser {
         };
 
         match initializer {
-            Some(stmt) => Ok(AstNode::Block(vec![stmt, while_stmt])),
+            Some(stmt) => Ok(AstNode::Block(Box::new([stmt, while_stmt]))),
             None => Ok(while_stmt),
         }
     }
@@ -526,7 +529,7 @@ impl Parser {
             True => Ok(AstNode::Literal(LiteralExpr::True)),
             Nil => Ok(AstNode::Literal(LiteralExpr::Nil)),
             Number(n) => Ok(AstNode::Literal(LiteralExpr::Number(n.clone()))),
-            String(s) => Ok(AstNode::Literal(LiteralExpr::StringLit(s.clone()))),
+            String(s) => Ok(AstNode::Literal(LiteralExpr::StringLit(s.into()))),
             LeftParen => Ok(self.grouping()?),
             Identifier(_) => Ok(AstNode::Variable(token.clone())),
             EOF => Err(Error::UnexpectedEOF),
@@ -559,8 +562,8 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: vec![],
-                errors: vec![Error::RanOutOfTokens]
+                stmts: Box::new([]),
+                errors: Box::new([Error::RanOutOfTokens])
             },
             expr
         );
@@ -578,8 +581,8 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: vec![],
-                errors: vec![Error::UnexpectedEOF]
+                stmts: Box::new([]),
+                errors: Box::new([Error::UnexpectedEOF])
             },
             expr
         );
@@ -589,7 +592,7 @@ mod test {
             line: 0,
         }];
         let expr = Parser::new(tokens).parse();
-        assert_eq!(AstNode::Prog(vec![]), expr);
+        assert_eq!(AstNode::Prog(Box::new([])), expr);
 
         let tokens = vec![
             Token {
@@ -623,21 +626,23 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
-                right: Box::new(AstNode::Literal(LiteralExpr::False)),
-                operator: Token {
-                    token_type: BangEqual,
-                    line: 0
-                },
-                left: Box::new(AstNode::BinaryExpr {
-                    left: Box::new(AstNode::Literal(LiteralExpr::False)),
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::BinaryExpr {
+                    right: Box::new(AstNode::Literal(LiteralExpr::False)),
                     operator: Token {
-                        token_type: EqualEqual,
+                        token_type: BangEqual,
                         line: 0
                     },
-                    right: Box::new(AstNode::Literal(LiteralExpr::False))
-                }),
-            }))]),
+                    left: Box::new(AstNode::BinaryExpr {
+                        left: Box::new(AstNode::Literal(LiteralExpr::False)),
+                        operator: Token {
+                            token_type: EqualEqual,
+                            line: 0
+                        },
+                        right: Box::new(AstNode::Literal(LiteralExpr::False))
+                    }),
+                }
+            ))])),
             expr
         );
 
@@ -673,21 +678,23 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
-                left: Box::new(AstNode::Literal(LiteralExpr::False)),
-                operator: Token {
-                    token_type: EqualEqual,
-                    line: 0
-                },
-                right: Box::new(AstNode::BinaryExpr {
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::BinaryExpr {
                     left: Box::new(AstNode::Literal(LiteralExpr::False)),
                     operator: Token {
-                        token_type: GreaterEqual,
+                        token_type: EqualEqual,
                         line: 0
                     },
-                    right: Box::new(AstNode::Literal(LiteralExpr::False))
-                }),
-            }))]),
+                    right: Box::new(AstNode::BinaryExpr {
+                        left: Box::new(AstNode::Literal(LiteralExpr::False)),
+                        operator: Token {
+                            token_type: GreaterEqual,
+                            line: 0
+                        },
+                        right: Box::new(AstNode::Literal(LiteralExpr::False))
+                    }),
+                }
+            ))])),
             expr
         );
 
@@ -723,21 +730,23 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::BinaryExpr {
-                left: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
-                operator: Token {
-                    token_type: Minus,
-                    line: 0
-                },
-                right: Box::new(AstNode::BinaryExpr {
-                    left: Box::new(AstNode::Literal(LiteralExpr::Number(4.0))),
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::BinaryExpr {
+                    left: Box::new(AstNode::Literal(LiteralExpr::Number(2.0))),
                     operator: Token {
-                        token_type: Star,
+                        token_type: Minus,
                         line: 0
                     },
-                    right: Box::new(AstNode::Literal(LiteralExpr::Number(6.0)))
-                }),
-            }))]),
+                    right: Box::new(AstNode::BinaryExpr {
+                        left: Box::new(AstNode::Literal(LiteralExpr::Number(4.0))),
+                        operator: Token {
+                            token_type: Star,
+                            line: 0
+                        },
+                        right: Box::new(AstNode::Literal(LiteralExpr::Number(6.0)))
+                    }),
+                }
+            ))])),
             expr
         );
 
@@ -761,13 +770,15 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::UnaryExpr {
-                operator: Token {
-                    token_type: Bang,
-                    line: 0
-                },
-                right: Box::new(AstNode::Literal(LiteralExpr::True))
-            }))]),
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::UnaryExpr {
+                    operator: Token {
+                        token_type: Bang,
+                        line: 0
+                    },
+                    right: Box::new(AstNode::Literal(LiteralExpr::True))
+                }
+            ))])),
             expr
         );
         let tokens = vec![
@@ -806,7 +817,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![
+            AstNode::Prog(Box::new([
                 AstNode::ExprStmt(Box::new(AstNode::UnaryExpr {
                     operator: Token {
                         token_type: Bang,
@@ -822,7 +833,7 @@ mod test {
                     },
                     right: Box::new(AstNode::Literal(LiteralExpr::Number(6.0)))
                 })),
-            ]),
+            ])),
             expr
         );
     }
@@ -853,9 +864,9 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::Grouping(
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(AstNode::Grouping(
                 Box::new(AstNode::Literal(LiteralExpr::False))
-            ))),]),
+            ))),])),
             expr
         );
 
@@ -884,11 +895,11 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: vec![],
-                errors: vec![Error::ExpectedClosingParen(Token {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
                     token_type: LeftParen,
                     line: 0
-                })]
+                })])
             },
             expr
         );
@@ -916,9 +927,9 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::PrintStmt(Box::new(AstNode::Literal(
+            AstNode::Prog(Box::new([AstNode::PrintStmt(Box::new(AstNode::Literal(
                 LiteralExpr::StringLit("this is a string".into())
-            )))]),
+            )))])),
             expr
         );
     }
@@ -953,13 +964,13 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::DeclStmt {
+            AstNode::Prog(Box::new([AstNode::DeclStmt {
                 identifier: Token {
                     line: 0,
                     token_type: Identifier("this".into()),
                 },
                 expr: Some(Box::new(AstNode::Literal(LiteralExpr::Number(1.0))))
-            }]),
+            }])),
             expr
         );
 
@@ -983,13 +994,13 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::DeclStmt {
+            AstNode::Prog(Box::new([AstNode::DeclStmt {
                 identifier: Token {
                     token_type: Identifier("this".into()),
                     line: 0
                 },
                 expr: None,
-            }]),
+            }])),
             expr
         );
 
@@ -1018,11 +1029,11 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: vec![],
-                errors: vec![Error::VarExpectedIdentifer(Token {
+                stmts: Box::new([]),
+                errors: Box::new([Error::VarExpectedIdentifer(Token {
                     line: 0,
                     token_type: Var
-                })]
+                })])
             },
             expr
         );
@@ -1052,11 +1063,11 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: vec![],
-                errors: vec![Error::ExpectedSemicolon {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedSemicolon {
                     line: 0,
                     preceding: Var.to_string()
-                }]
+                }])
             },
             expr
         );
@@ -1088,13 +1099,13 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::Assign {
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(AstNode::Assign {
                 target: Box::new(AstNode::Variable(Token {
                     token_type: Identifier("test".into()),
                     line: 0,
                 })),
                 value: Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))
-            }))]),
+            }))])),
             expr
         );
     }
@@ -1116,7 +1127,10 @@ mod test {
             },
         ];
         let expr = Parser::new(tokens).parse();
-        assert_eq!(AstNode::Prog(vec![AstNode::Block(Vec::new())]), expr);
+        assert_eq!(
+            AstNode::Prog(Box::new([AstNode::Block(Box::new([]))])),
+            expr
+        );
 
         let tokens = vec![
             Token {
@@ -1146,9 +1160,9 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::Block(vec![AstNode::PrintStmt(Box::new(
-                AstNode::Literal(LiteralExpr::Number(1.0))
-            ))])]),
+            AstNode::Prog(Box::new([AstNode::Block(Box::new([AstNode::PrintStmt(
+                Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))
+            )]))])),
             expr
         );
 
@@ -1177,11 +1191,11 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: Vec::new(),
-                errors: vec![Error::ExpectedClosingBrace(Token {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingBrace(Token {
                     token_type: LeftBrace,
                     line: 0,
-                })]
+                })])
             },
             expr
         );
@@ -1209,7 +1223,9 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::Block(vec![AstNode::Block(Vec::new())])]),
+            AstNode::Prog(Box::new([AstNode::Block(Box::new([AstNode::Block(
+                Box::new([])
+            )]))])),
             expr
         );
     }
@@ -1252,13 +1268,13 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::IfStmt {
+            AstNode::Prog(Box::new([AstNode::IfStmt {
                 condition: Box::new(AstNode::Literal(LiteralExpr::True)),
                 then_stmt: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
                     LiteralExpr::True
                 )))),
                 else_stmt: None,
-            }]),
+            }])),
             expr
         );
 
@@ -1314,7 +1330,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::IfStmt {
+            AstNode::Prog(Box::new([AstNode::IfStmt {
                 condition: Box::new(AstNode::Literal(LiteralExpr::True)),
                 then_stmt: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
                     LiteralExpr::True
@@ -1322,7 +1338,7 @@ mod test {
                 else_stmt: Some(Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
                     LiteralExpr::False
                 ))))),
-            }]),
+            }])),
             expr
         );
 
@@ -1374,7 +1390,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![
+            AstNode::Prog(Box::new([
                 AstNode::IfStmt {
                     condition: Box::new(AstNode::Literal(LiteralExpr::True)),
                     then_stmt: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
@@ -1383,7 +1399,7 @@ mod test {
                     else_stmt: None,
                 },
                 AstNode::PrintStmt(Box::new(AstNode::Literal(LiteralExpr::False))),
-            ]),
+            ])),
             expr
         );
     }
@@ -1414,14 +1430,16 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
-                left: Box::new(AstNode::Literal(LiteralExpr::True)),
-                operator: Token {
-                    line: 0,
-                    token_type: Or
-                },
-                right: Box::new(AstNode::Literal(LiteralExpr::True)),
-            }))]),
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::LogicalExpr {
+                    left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    operator: Token {
+                        line: 0,
+                        token_type: Or
+                    },
+                    right: Box::new(AstNode::Literal(LiteralExpr::True)),
+                }
+            ))])),
             expr
         );
 
@@ -1449,14 +1467,16 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
-                left: Box::new(AstNode::Literal(LiteralExpr::True)),
-                operator: Token {
-                    line: 0,
-                    token_type: And
-                },
-                right: Box::new(AstNode::Literal(LiteralExpr::True)),
-            }))]),
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::LogicalExpr {
+                    left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    operator: Token {
+                        line: 0,
+                        token_type: And
+                    },
+                    right: Box::new(AstNode::Literal(LiteralExpr::True)),
+                }
+            ))])),
             expr
         );
 
@@ -1492,21 +1512,23 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
-                left: Box::new(AstNode::LogicalExpr {
-                    left: Box::new(AstNode::Literal(LiteralExpr::True)),
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::LogicalExpr {
+                    left: Box::new(AstNode::LogicalExpr {
+                        left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                        operator: Token {
+                            line: 0,
+                            token_type: And
+                        },
+                        right: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    }),
                     operator: Token {
                         line: 0,
-                        token_type: And
+                        token_type: Or
                     },
                     right: Box::new(AstNode::Literal(LiteralExpr::True)),
-                }),
-                operator: Token {
-                    line: 0,
-                    token_type: Or
-                },
-                right: Box::new(AstNode::Literal(LiteralExpr::True)),
-            }))]),
+                }
+            ))])),
             expr
         );
 
@@ -1542,21 +1564,23 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::ExprStmt(Box::new(AstNode::LogicalExpr {
-                left: Box::new(AstNode::Literal(LiteralExpr::True)),
-                operator: Token {
-                    line: 0,
-                    token_type: Or
-                },
-                right: Box::new(AstNode::LogicalExpr {
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(
+                AstNode::LogicalExpr {
                     left: Box::new(AstNode::Literal(LiteralExpr::True)),
                     operator: Token {
                         line: 0,
-                        token_type: And
+                        token_type: Or
                     },
-                    right: Box::new(AstNode::Literal(LiteralExpr::True)),
-                }),
-            }))]),
+                    right: Box::new(AstNode::LogicalExpr {
+                        left: Box::new(AstNode::Literal(LiteralExpr::True)),
+                        operator: Token {
+                            line: 0,
+                            token_type: And
+                        },
+                        right: Box::new(AstNode::Literal(LiteralExpr::True)),
+                    }),
+                }
+            ))])),
             expr
         );
     }
@@ -1599,12 +1623,12 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::WhileStmt {
+            AstNode::Prog(Box::new([AstNode::WhileStmt {
                 condition: Box::new(AstNode::Literal(LiteralExpr::True)),
                 body: Box::new(AstNode::PrintStmt(Box::new(AstNode::Literal(
                     LiteralExpr::True
                 ))))
-            }]),
+            }])),
             expr
         );
 
@@ -1641,13 +1665,13 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: vec![AstNode::PrintStmt(Box::new(AstNode::Literal(
+                stmts: Box::new([AstNode::PrintStmt(Box::new(AstNode::Literal(
                     LiteralExpr::True
-                )))],
-                errors: vec![Error::ExpectedOpeningParen(Token {
+                )))]),
+                errors: Box::new([Error::ExpectedOpeningParen(Token {
                     token_type: While,
                     line: 0
-                })],
+                })]),
             },
             expr
         );
@@ -1685,13 +1709,13 @@ mod test {
         let expr = Parser::new(tokens).parse();
         assert_eq!(
             AstNode::ProgInvalid {
-                stmts: vec![AstNode::PrintStmt(Box::new(AstNode::Literal(
+                stmts: Box::new([AstNode::PrintStmt(Box::new(AstNode::Literal(
                     LiteralExpr::True
-                )))],
-                errors: vec![Error::ExpectedClosingParen(Token {
+                )))]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
                     token_type: While,
                     line: 0
-                })],
+                })]),
             },
             expr
         );
@@ -1735,12 +1759,12 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::WhileStmt {
+            AstNode::Prog(Box::new([AstNode::WhileStmt {
                 condition: Box::new(AstNode::Literal(LiteralExpr::True)),
                 body: Box::new(AstNode::ExprStmt(Box::new(AstNode::Literal(
                     LiteralExpr::True
                 ))))
-            }]),
+            }])),
             expr
         );
 
@@ -1796,7 +1820,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::Block(vec![
+            AstNode::Prog(Box::new([AstNode::Block(Box::new([
                 AstNode::DeclStmt {
                     identifier: Token {
                         token_type: Identifier("i".into()),
@@ -1810,7 +1834,7 @@ mod test {
                         LiteralExpr::True
                     ))))
                 }
-            ])]),
+            ]))])),
             expr
         );
 
@@ -1878,7 +1902,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::Block(vec![
+            AstNode::Prog(Box::new([AstNode::Block(Box::new([
                 AstNode::DeclStmt {
                     identifier: Token {
                         token_type: Identifier("i".into()),
@@ -1902,7 +1926,7 @@ mod test {
                         LiteralExpr::True
                     ))))
                 }
-            ])]),
+            ]))])),
             expr
         );
 
@@ -1990,7 +2014,7 @@ mod test {
         ];
         let expr = Parser::new(tokens).parse();
         assert_eq!(
-            AstNode::Prog(vec![AstNode::Block(vec![
+            AstNode::Prog(Box::new([AstNode::Block(Box::new([
                 AstNode::DeclStmt {
                     identifier: Token {
                         token_type: Identifier("i".into()),
@@ -2010,7 +2034,7 @@ mod test {
                         },
                         right: Box::new(AstNode::Literal(LiteralExpr::Number(3.0)))
                     }),
-                    body: Box::new(AstNode::Block(vec![
+                    body: Box::new(AstNode::Block(Box::new([
                         AstNode::ExprStmt(Box::new(AstNode::Literal(LiteralExpr::True))),
                         AstNode::Assign {
                             target: Box::new(AstNode::Variable(Token {
@@ -2029,9 +2053,9 @@ mod test {
                                 right: Box::new(AstNode::Literal(LiteralExpr::Number(1.0)))
                             })
                         }
-                    ]))
+                    ])))
                 }
-            ])]),
+            ]))])),
             expr
         );
     }

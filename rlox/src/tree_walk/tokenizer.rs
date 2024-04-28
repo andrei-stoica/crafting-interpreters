@@ -88,7 +88,7 @@ impl Tokenizer {
                 _ => content.push(src.next().expect("Character expected")),
             };
         }
-        TokenType::Comment(content)
+        TokenType::Comment(content.into())
     }
 
     fn consume_string_lit(&mut self, src: &mut Peekable<Chars>) -> Result<TokenType> {
@@ -97,7 +97,7 @@ impl Tokenizer {
             match c {
                 '"' => {
                     src.next();
-                    return Ok(TokenType::String(content));
+                    return Ok(TokenType::String(content.into()));
                 }
                 '\n' => {
                     content.push(src.next().expect("terminated string"));
@@ -132,7 +132,7 @@ impl Tokenizer {
             }
         }
         match self.keywords.get(&content) {
-            None => TokenType::Identifier(content),
+            None => TokenType::Identifier(content.into()),
             Some(token_type) => token_type.clone(),
         }
     }
