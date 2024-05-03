@@ -1,4 +1,4 @@
-use crate::tree_walk::token::Token;
+use crate::tree_walk::token::{self, Token};
 use std::fmt::Display;
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -8,6 +8,7 @@ pub enum Error {
     RanOutOfTokens,
     UnexpectedEOF,
     UnrecognizedExpression,
+    ExpectedComma,
     ExpectedSemicolon { line: u32, preceding: String },
     ExpectedOpeningParen(Token),
     ExpectedClosingParen(Token),
@@ -15,6 +16,7 @@ pub enum Error {
     VarExpectedIdentifer(Token),
     VarExpectedEqual(Token),
     InvalidAssignmentTarget(Token),
+    TooManyFunctionArgs(Token),
 }
 
 impl Display for Error {
@@ -52,6 +54,13 @@ impl Display for Error {
             }
             Self::InvalidAssignmentTarget(token) => {
                 write!(f, "[line {}] Invalid assignment target.", token.line)
+            }
+            Self::TooManyFunctionArgs(token) => {
+                write!(
+                    f,
+                    "[line {}] Can't have more than 255 arguments.",
+                    token.line
+                )
             }
             Self::UnexpectedEOF => write!(f, "Reached End of file unexpectedly."),
             _ => write!(f, "{:?}", self),

@@ -52,6 +52,11 @@ pub enum AstNode {
         operator: Token,
         right: Box<AstNode>,
     },
+    CallExpr {
+        calle: Box<AstNode>,
+        paren: Token,
+        arguments: Option<Box<[AstNode]>>,
+    },
     Literal(LiteralExpr),
     Variable(Token),
     Grouping(Box<AstNode>),
@@ -518,8 +523,50 @@ impl Parser {
                     right: Box::new(right),
                 })
             }
-            _ => self.primary(),
+            _ => self.call(),
         }
+    }
+
+    fn call(&mut self) -> Result<AstNode> {
+        let expr = self.primary()?;
+
+        let next = self.peek().ok_or(Error::RanOutOfTokens)?;
+        match next.token_type {
+            LeftParen => Ok(self.finish_call(expr)?),
+            _ => Ok(expr),
+        }
+    }
+
+    fn finish_call(&mut self, callee: AstNode) -> Result<AstNode> {
+        let paren = self.advance()?;
+        let mut arguments = Vec::new();
+        while let Some(token) = self.peek() {
+            match token.token_type {
+                RightParen => break,
+                Semicolon => break,
+                _ => {
+                    if arguments.len() > 255 {
+                        return Err(Error::TooManyFunctionArgs(token.clone()));
+                    }
+                    arguments.push(self.expression()?);
+                    let next = self.peek().ok_or(Error::RanOutOfTokens)?;
+                    match next.token_type {
+                        Comma => {
+                            self.advance()?;
+                            continue;
+                        }
+                        _ => break,
+                    }
+                }
+            }
+        }
+        expect!(self, RightParen, Error::ExpectedClosingParen(paren.clone()))?;
+
+        Ok(AstNode::CallExpr {
+            calle: Box::new(callee),
+            paren,
+            arguments: Some(arguments.into()),
+        })
     }
 
     fn primary(&mut self) -> Result<AstNode> {
@@ -2056,6 +2103,257 @@ mod test {
                     ])))
                 }
             ]))])),
+            expr
+        );
+    }
+
+    #[test]
+    fn test_call_expression() {
+        let tokens = vec![
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
+                    token_type: LeftParen,
+                    line: 0,
+                })]),
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(AstNode::CallExpr {
+                calle: Box::new(AstNode::Variable(Token {
+                    token_type: Identifier("f".into()),
+                    line: 0
+                })),
+                paren: Token {
+                    token_type: LeftParen,
+                    line: 0
+                },
+                arguments: Some(Box::new([])),
+            }))]),),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("x".into()),
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(AstNode::CallExpr {
+                calle: Box::new(AstNode::Variable(Token {
+                    token_type: Identifier("f".into()),
+                    line: 0
+                })),
+                paren: Token {
+                    token_type: LeftParen,
+                    line: 0
+                },
+                arguments: Some(Box::new([AstNode::Variable(Token {
+                    token_type: Identifier("x".into()),
+                    line: 0
+                })])),
+            }))]),),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("x".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Comma,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("y".into()),
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(Box::new([AstNode::ExprStmt(Box::new(AstNode::CallExpr {
+                calle: Box::new(AstNode::Variable(Token {
+                    token_type: Identifier("f".into()),
+                    line: 0
+                })),
+                paren: Token {
+                    token_type: LeftParen,
+                    line: 0
+                },
+                arguments: Some(Box::new([
+                    AstNode::Variable(Token {
+                        token_type: Identifier("x".into()),
+                        line: 0
+                    }),
+                    AstNode::Variable(Token {
+                        token_type: Identifier("y".into()),
+                        line: 0
+                    })
+                ])),
+            }))]),),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("x".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("y".into()),
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
+                    token_type: LeftParen,
+                    line: 0
+                })]),
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("x".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Semicolon,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
+                    token_type: LeftParen,
+                    line: 0
+                })]),
+            },
             expr
         );
     }
