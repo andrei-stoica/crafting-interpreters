@@ -1,5 +1,5 @@
-use crate::tree_walk::parser::LiteralExpr; // This might need to come out of
-                                           // tree_walk to make more sense
+use super::Builtin;
+use crate::tree_walk::parser::{AstNode, LiteralExpr}; // This might need to come out of
 
 use std::fmt::Display;
 
@@ -8,6 +8,11 @@ pub enum LoxType {
     Number(f64),
     Bool(bool),
     String(Box<str>),
+    Function {
+        parameters: Box<[LoxType]>,
+        body: AstNode,
+    },
+    Builtin(Builtin),
     Nil,
 }
 
@@ -39,6 +44,18 @@ impl Display for LoxType {
             Self::Number(value) => write!(f, "{}", value),
             Self::String(value) => write!(f, "{}", value),
             Self::Bool(value) => write!(f, "{}", value),
+            Self::Function { parameters, .. } => {
+                write!(
+                    f,
+                    "fn ({})",
+                    parameters
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            Self::Builtin(builtin) => write!(f, "{builtin}"),
             Self::Nil => write!(f, "nil"),
         }
     }
