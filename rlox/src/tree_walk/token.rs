@@ -65,7 +65,8 @@ pub enum TokenType {
 impl Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Var => write!(f, "variable declearation"),
+            Self::Fun => write!(f, "function declaration"),
+            Self::Var => write!(f, "variable declaration"),
             Self::Print => write!(f, "print statement"),
             Self::If => write!(f, "if"),
             Self::LeftParen => write!(f, "opeing paren"),

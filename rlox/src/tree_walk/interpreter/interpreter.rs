@@ -42,6 +42,11 @@ impl<'a> Interpreter<'a> {
                 then_stmt,
                 else_stmt,
             } => self.evaluate_if_stmt(condition, then_stmt, else_stmt),
+            FuncStmt {
+                name,
+                parameters,
+                body,
+            } => self.evaluate_fun_decl(name, parameters.as_ref(), body),
             PrintStmt(expr) => self.evaluate_print_stmt(expr),
             WhileStmt { condition, body } => self.evaluate_while_stmt(condition, body),
             Block(exprs) => self.evaluate_block(exprs),
@@ -122,6 +127,32 @@ impl<'a> Interpreter<'a> {
             },
             _ => unreachable!("is_truthy() should only return LoxType::Bool()"),
         }
+    }
+
+    fn evaluate_fun_decl(
+        &mut self,
+        identifier: &Token,
+        parameters: &[Token],
+        body: &AstNode,
+    ) -> Result<LoxType> {
+        let name = match &identifier.token_type {
+            TokenType::Identifier(name) => Ok(name.clone()),
+            _ => Err(Error::TokenIsNotAnIdenifier(identifier.clone())),
+        }?;
+        let params = parameters
+            .iter()
+            .map(|param| match &param.token_type {
+                TokenType::Identifier(name) => Ok(LoxType::String(name.clone())),
+                _ => Err(Error::TokenIsNotAnIdenifier(param.clone())),
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let func = LoxType::Function {
+            parameters: params.into(),
+            body: body.clone(),
+        };
+
+        self.environment.put(name, func.clone());
+        Ok(LoxType::Nil)
     }
 
     fn evaluate_print_stmt(&mut self, expr: &AstNode) -> Result<LoxType> {
@@ -1541,5 +1572,71 @@ mod test {
         if let Ok(LoxType::Number(x)) = res {
             assert!(x > 0.0);
         }
+    }
+
+    #[test]
+    fn test_function_declaration() {
+        let mut interpreter = Interpreter::new();
+
+        let prog = FuncStmt {
+            name: Token {
+                token_type: TokenType::Identifier("f".into()),
+                line: 0,
+            },
+            parameters: Box::new([Token {
+                token_type: TokenType::Identifier("x".into()),
+                line: 0,
+            }]),
+            body: Box::new(Block(Box::new([]))),
+        };
+        let res = interpreter.evaluate(&prog);
+        assert_eq!(Ok(LoxType::Nil), res);
+        assert_eq!(
+            Ok(LoxType::Function {
+                parameters: Box::new([LoxType::String("x".into())]),
+                body: Block(Box::new([])),
+            }),
+            interpreter.environment.get("f".into())
+        );
+
+        let prog = FuncStmt {
+            name: Token {
+                token_type: TokenType::Comma,
+                line: 0,
+            },
+            parameters: Box::new([Token {
+                token_type: TokenType::Identifier("x".into()),
+                line: 0,
+            }]),
+            body: Box::new(Block(Box::new([]))),
+        };
+        let res = interpreter.evaluate(&prog);
+        assert_eq!(
+            Err(Error::TokenIsNotAnIdenifier(Token {
+                token_type: TokenType::Comma,
+                line: 0,
+            })),
+            res
+        );
+
+        let prog = FuncStmt {
+            name: Token {
+                token_type: TokenType::Identifier("x".into()),
+                line: 0,
+            },
+            parameters: Box::new([Token {
+                token_type: TokenType::For,
+                line: 0,
+            }]),
+            body: Box::new(Block(Box::new([]))),
+        };
+        let res = interpreter.evaluate(&prog);
+        assert_eq!(
+            Err(Error::TokenIsNotAnIdenifier(Token {
+                token_type: TokenType::For,
+                line: 0,
+            })),
+            res
+        );
     }
 }

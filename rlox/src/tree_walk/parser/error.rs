@@ -12,8 +12,9 @@ pub enum Error {
     ExpectedSemicolon { line: u32, preceding: String },
     ExpectedOpeningParen(Token),
     ExpectedClosingParen(Token),
+    ExpectedOpeningBrace(Token),
     ExpectedClosingBrace(Token),
-    VarExpectedIdentifer(Token),
+    ExpectedIdentifer(Token),
     VarExpectedEqual(Token),
     InvalidAssignmentTarget(Token),
     TooManyFunctionArgs(Token),
@@ -28,21 +29,17 @@ impl Display for Error {
             Self::ExpectedClosingParen(token) => {
                 write!(
                     f,
-                    "[line {}] Expected ')' after {}.",
-                    token.line, token.token_type
-                )
-            }
-            Self::ExpectedClosingParen(token) => {
-                write!(
-                    f,
                     "[line {}] Expected closing ')' after {}.",
                     token.line, token.token_type
                 )
             }
+            Self::ExpectedOpeningBrace(token) => {
+                write!(f, "[line {}] Expected opening '{{'.", token.line)
+            }
             Self::ExpectedClosingBrace(token) => {
                 write!(f, "[line {}] Expected closing '}}'.", token.line)
             }
-            Self::VarExpectedIdentifer(token) => {
+            Self::ExpectedIdentifer(token) => {
                 write!(
                     f,
                     "[line {}] Expected Identifer after {:?}.",

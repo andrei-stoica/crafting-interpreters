@@ -22,6 +22,11 @@ pub enum AstNode {
         identifier: Token,
         expr: Option<Box<AstNode>>,
     },
+    FuncStmt {
+        name: Token,
+        parameters: Box<[Token]>,
+        body: Box<AstNode>,
+    },
     IfStmt {
         condition: Box<AstNode>,
         then_stmt: Box<AstNode>,
@@ -172,9 +177,57 @@ impl Parser {
     fn decleration(&mut self) -> Result<AstNode> {
         let token = self.peek().ok_or(Error::RanOutOfTokens)?;
         match token.token_type {
+            Fun => self.function_decleration(),
             Var => self.var_decleration(),
             _ => self.statement(),
         }
+    }
+
+    fn function_decleration(&mut self) -> Result<AstNode> {
+        let fun_token = self.advance()?;
+        let identifier = expect!(
+            self,
+            Identifier(_),
+            Error::ExpectedIdentifer(fun_token.clone())
+        )?;
+
+        expect!(
+            self,
+            LeftParen,
+            Error::ExpectedOpeningParen(fun_token.clone())
+        )?;
+        let mut parameters = Vec::new();
+        while let Some(token) = self.peek() {
+            match &token.token_type {
+                Identifier(_) => {
+                    parameters.push(self.advance()?);
+                    match self.peek() {
+                        Some(token) if matches!(token.token_type, Comma) => {
+                            let _ = self.advance();
+                        }
+                        _ => break,
+                    }
+                }
+                _ => break,
+            }
+        }
+        expect!(
+            self,
+            RightParen,
+            Error::ExpectedClosingParen(fun_token.clone())
+        )?;
+
+        let opening_brace = self.peek().ok_or(Error::RanOutOfTokens)?;
+        let body = match opening_brace.token_type {
+            LeftBrace => self.block(),
+            _ => Err(Error::ExpectedOpeningBrace(fun_token)),
+        }?;
+
+        Ok(AstNode::FuncStmt {
+            name: identifier,
+            parameters: parameters.into(),
+            body: Box::new(body),
+        })
     }
 
     fn var_decleration(&mut self) -> Result<AstNode> {
@@ -182,7 +235,7 @@ impl Parser {
         let identifier = expect!(
             self,
             Identifier(_),
-            Error::VarExpectedIdentifer(var_token.clone())
+            Error::ExpectedIdentifer(var_token.clone())
         )?;
         let next = self.peek();
         let expr = match next {
@@ -1077,7 +1130,7 @@ mod test {
         assert_eq!(
             AstNode::ProgInvalid {
                 stmts: Box::new([]),
-                errors: Box::new([Error::VarExpectedIdentifer(Token {
+                errors: Box::new([Error::ExpectedIdentifer(Token {
                     line: 0,
                     token_type: Var
                 })])
@@ -2353,6 +2406,364 @@ mod test {
                     token_type: LeftParen,
                     line: 0
                 })]),
+            },
+            expr
+        );
+    }
+
+    #[test]
+    fn test_function_declaration() {
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(Box::new([AstNode::FuncStmt {
+                name: Token {
+                    token_type: Identifier("f".into()),
+                    line: 0,
+                },
+                parameters: Box::new([]),
+                body: Box::new(AstNode::Block(Box::new([])))
+            }])),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("x".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Comma,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("y".into()),
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::Prog(Box::new([AstNode::FuncStmt {
+                name: Token {
+                    token_type: Identifier("f".into()),
+                    line: 0,
+                },
+                parameters: Box::new([
+                    Token {
+                        token_type: Identifier("x".into()),
+                        line: 0,
+                    },
+                    Token {
+                        token_type: Identifier("y".into()),
+                        line: 0,
+                    },
+                ]),
+                body: Box::new(AstNode::Block(Box::new([])))
+            }])),
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("x".into()),
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("y".into()),
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
+                    token_type: Fun,
+                    line: 0,
+                },)])
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: Comma,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
+                    token_type: Fun,
+                    line: 0,
+                },)])
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedOpeningParen(Token {
+                    token_type: Fun,
+                    line: 0,
+                },)])
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingParen(Token {
+                    token_type: Fun,
+                    line: 0,
+                },)])
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: RightBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedOpeningBrace(Token {
+                    token_type: Fun,
+                    line: 0,
+                },)])
+            },
+            expr
+        );
+
+        let tokens = vec![
+            Token {
+                token_type: Fun,
+                line: 0,
+            },
+            Token {
+                token_type: Identifier("f".into()),
+                line: 0,
+            },
+            Token {
+                token_type: LeftParen,
+                line: 0,
+            },
+            Token {
+                token_type: RightParen,
+                line: 0,
+            },
+            Token {
+                token_type: LeftBrace,
+                line: 0,
+            },
+            Token {
+                token_type: EOF,
+                line: 0,
+            },
+        ];
+        let expr = Parser::new(tokens).parse();
+        assert_eq!(
+            AstNode::ProgInvalid {
+                stmts: Box::new([]),
+                errors: Box::new([Error::ExpectedClosingBrace(Token {
+                    token_type: LeftBrace,
+                    line: 0,
+                })])
             },
             expr
         );
