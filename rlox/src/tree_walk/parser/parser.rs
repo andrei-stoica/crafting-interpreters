@@ -55,7 +55,7 @@ pub enum AstNode {
     CallExpr {
         calle: Box<AstNode>,
         paren: Token,
-        arguments: Option<Box<[AstNode]>>,
+        arguments: Box<[AstNode]>,
     },
     Literal(LiteralExpr),
     Variable(Token),
@@ -565,7 +565,7 @@ impl Parser {
         Ok(AstNode::CallExpr {
             calle: Box::new(callee),
             paren,
-            arguments: Some(arguments.into()),
+            arguments: arguments.into(),
         })
     }
 
@@ -2172,7 +2172,7 @@ mod test {
                     token_type: LeftParen,
                     line: 0
                 },
-                arguments: Some(Box::new([])),
+                arguments: Box::new([]),
             }))]),),
             expr
         );
@@ -2214,10 +2214,10 @@ mod test {
                     token_type: LeftParen,
                     line: 0
                 },
-                arguments: Some(Box::new([AstNode::Variable(Token {
+                arguments: Box::new([AstNode::Variable(Token {
                     token_type: Identifier("x".into()),
                     line: 0
-                })])),
+                })]),
             }))]),),
             expr
         );
@@ -2267,7 +2267,7 @@ mod test {
                     token_type: LeftParen,
                     line: 0
                 },
-                arguments: Some(Box::new([
+                arguments: Box::new([
                     AstNode::Variable(Token {
                         token_type: Identifier("x".into()),
                         line: 0
@@ -2276,7 +2276,7 @@ mod test {
                         token_type: Identifier("y".into()),
                         line: 0
                     })
-                ])),
+                ]),
             }))]),),
             expr
         );

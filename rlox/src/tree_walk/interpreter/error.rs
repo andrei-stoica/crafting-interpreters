@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::lox::type_system::LoxType;
+use crate::lox::{Error as LoxTypeError, LoxType};
 use crate::tree_walk::token::Token;
 
 #[derive(Debug, PartialEq)]
@@ -14,6 +14,14 @@ pub enum Error {
     ExitingGlobalScope,
     UndifinedVariable(String),
     ConditionNotBool,
+    NotCallable {
+        line: u32,
+        err: LoxTypeError,
+    },
+    InvalidArity {
+        line: u32,
+        err: LoxTypeError,
+    },
 }
 
 impl Display for Error {
@@ -35,6 +43,9 @@ impl Display for Error {
             }
             Self::UndifinedVariable(name) => {
                 write!(f, "Undifined variable '{}'.", name)
+            }
+            Self::NotCallable { line, err } | Self::InvalidArity { line, err } => {
+                write!(f, "[Line {line}] {err}")
             }
             _ => todo!(),
         }

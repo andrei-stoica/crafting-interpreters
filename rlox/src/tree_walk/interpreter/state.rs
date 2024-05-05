@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::lox::type_system::LoxType;
+use crate::lox::LoxType;
 
 use super::{Error, Result};
 

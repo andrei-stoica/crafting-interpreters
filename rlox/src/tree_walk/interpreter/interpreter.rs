@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::lox::type_system::LoxType;
+use crate::lox::{Builtin, Callable, Error as LoxTypeError, LoxType};
 use crate::tree_walk::parser::AstNode::{self, *};
 use crate::tree_walk::token::{Token, TokenType};
 
@@ -21,10 +21,13 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn new_with_output(out: Box<dyn Write + 'a>, err_out: Box<dyn Write + 'a>) -> Self {
+        let mut globals = Environment::new();
+        globals.put("time".into(), LoxType::Builtin(Builtin::Time));
+
         Self {
             output: out,
             err_output: err_out,
-            environment: Environment::new(),
+            environment: globals,
         }
     }
 
@@ -55,6 +58,11 @@ impl<'a> Interpreter<'a> {
                 right,
             } => self.evaluate_binary_expr(left, operator, right),
             UnaryExpr { operator, right } => self.evaluate_unary_expr(operator, right),
+            CallExpr {
+                calle,
+                paren,
+                arguments,
+            } => self.evaluate_call_expr(calle, paren, &arguments),
             Literal(expr) => Ok(expr.into()),
             Variable(token) => self.evaluate_variable_expr(token),
             Grouping(expr) => self.evaluate(expr),
@@ -308,10 +316,36 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    fn evaluate_call_expr(
+        &mut self,
+        callee: &AstNode,
+        paren: &Token,
+        argumnets: &Box<[AstNode]>,
+    ) -> Result<LoxType> {
+        let callee_val = self.evaluate(callee)?;
+
+        let args = argumnets
+            .iter()
+            .map(|arg| self.evaluate(arg))
+            .collect::<Result<Vec<_>>>()?;
+
+        callee_val
+            .call(self, args.into())
+            .or_else(|err| Err(Self::convert_type_error(paren.line, err)))
+    }
+
     fn evaluate_variable_expr(&mut self, token: &Token) -> Result<LoxType> {
         match &token.token_type {
             TokenType::Identifier(name) => self.environment.get(&name),
             _ => unreachable!("Variable expresion should always be an identifier."),
+        }
+    }
+
+    fn convert_type_error(line: u32, err: LoxTypeError) -> Error {
+        match err {
+            LoxTypeError::NotCallable => Error::NotCallable { line, err },
+            LoxTypeError::InvalidArity { .. } => Error::InvalidArity { line, err },
+            err => unimplemented!("converions not implemented for {err} to interpreter error"),
         }
     }
 }
@@ -1440,5 +1474,72 @@ mod test {
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
         assert_eq!("0\n1\n2\n3\n".to_string(), output);
+    }
+
+    #[test]
+    fn test_call() {
+        let mut interpreter = Interpreter::new();
+
+        let prog = ExprStmt(Box::new(CallExpr {
+            calle: Box::new(Variable(Token {
+                token_type: TokenType::Identifier("f".into()),
+                line: 0,
+            })),
+            paren: Token {
+                token_type: TokenType::LeftParen,
+                line: 0,
+            },
+            arguments: Box::new([]),
+        }));
+        let res = interpreter.evaluate(&prog);
+        assert_eq!(Err(Error::UndifinedVariable("f".into())), res);
+
+        let prog = DeclStmt {
+            identifier: Token {
+                token_type: TokenType::Identifier("f".into()),
+                line: 0,
+            },
+            expr: Some(Box::new(Literal(LiteralExpr::Number(1.0)))),
+        };
+        let res = interpreter.evaluate(&prog);
+        assert_eq!(Ok(LoxType::Number(1.0)), res);
+
+        let prog = ExprStmt(Box::new(CallExpr {
+            calle: Box::new(Variable(Token {
+                token_type: TokenType::Identifier("f".into()),
+                line: 0,
+            })),
+            paren: Token {
+                token_type: TokenType::LeftParen,
+                line: 0,
+            },
+            arguments: Box::new([]),
+        }));
+        let res = interpreter.evaluate(&prog);
+        assert_eq!(
+            Err(Error::NotCallable {
+                line: 0,
+                err: LoxTypeError::NotCallable
+            }),
+            res
+        );
+
+        let prog = ExprStmt(Box::new(CallExpr {
+            calle: Box::new(Variable(Token {
+                token_type: TokenType::Identifier("time".into()),
+                line: 0,
+            })),
+            paren: Token {
+                token_type: TokenType::LeftParen,
+                line: 0,
+            },
+            arguments: Box::new([]),
+        }));
+        let res = interpreter.evaluate(&prog);
+        assert!(res.is_ok());
+        assert!(matches!(res.as_ref().unwrap(), LoxType::Number(_)));
+        if let Ok(LoxType::Number(x)) = res {
+            assert!(x > 0.0);
+        }
     }
 }
