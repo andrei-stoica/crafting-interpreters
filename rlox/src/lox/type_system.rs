@@ -1,4 +1,4 @@
-use super::Builtin;
+use crate::tree_walk::interpreter::Builtin;
 use crate::tree_walk::parser::{AstNode, LiteralExpr}; // This might need to come out of
 
 use std::fmt::Display;
@@ -9,7 +9,7 @@ pub enum LoxType {
     Bool(bool),
     String(Box<str>),
     Function {
-        parameters: Box<[LoxType]>,
+        parameters: Box<[String]>,
         body: AstNode,
     },
     Builtin(Builtin),

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::lox::{Error as LoxTypeError, LoxType};
+use crate::lox::LoxType;
 use crate::tree_walk::token::Token;
 
 #[derive(Debug, PartialEq)]
@@ -15,12 +15,15 @@ pub enum Error {
     UndifinedVariable(String),
     ConditionNotBool,
     NotCallable {
-        line: u32,
-        err: LoxTypeError,
+        line: Option<usize>,
     },
     InvalidArity {
-        line: u32,
-        err: LoxTypeError,
+        // HACK: call funcion doesn't have knowledge of the line.
+        // returning none and enriching the error furtur up the call stack
+        // for the moment
+        line: Option<usize>,
+        expected: usize,
+        received: usize,
     },
 }
 
@@ -44,11 +47,30 @@ impl Display for Error {
             Self::UndifinedVariable(name) => {
                 write!(f, "Undifined variable '{}'.", name)
             }
-            Self::NotCallable { line, err } | Self::InvalidArity { line, err } => {
-                write!(f, "[Line {line}] {err}")
+            Self::NotCallable { line } => {
+                let line_text = optional_line_to_string(line);
+                write!(f, "[Line {line_text}] Only functions are callable")
+            }
+            Self::InvalidArity {
+                line,
+                expected,
+                received,
+            } => {
+                let line_text = optional_line_to_string(line);
+                write!(
+                    f,
+                    "[Line {line_text}] Expected {expected} arguments but got {received}."
+                )
             }
             _ => todo!(),
         }
+    }
+}
+
+fn optional_line_to_string(line: &Option<usize>) -> String {
+    match line {
+        Some(l) => l.to_string(),
+        None => "N/A".into(),
     }
 }
 

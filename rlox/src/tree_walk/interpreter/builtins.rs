@@ -1,15 +1,15 @@
+use crate::tree_walk::interpreter::Interpreter;
 use std::fmt::Display;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::Callable;
 use super::Error;
-use super::LoxType;
+use crate::lox::LoxType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Builtin {
     Time,
 }
-
 fn time() -> LoxType {
     let start = SystemTime::now();
     let since_the_epoch = start
@@ -38,11 +38,12 @@ impl Callable for Builtin {
 
     fn call(
         &self,
-        interpreter: &mut crate::tree_walk::interpreter::Interpreter,
-        arguments: Box<[super::LoxType]>,
-    ) -> super::Result<super::LoxType> {
+        _interpreter: &mut Interpreter,
+        arguments: Box<[LoxType]>,
+    ) -> super::Result<LoxType> {
         if arguments.len() != self.arity() {
             return Err(Error::InvalidArity {
+                line: None,
                 expected: self.arity(),
                 received: arguments.len(),
             });

@@ -1,18 +1,22 @@
+use std::borrow::BorrowMut;
 use std::io::Write;
 
-use crate::lox::{Builtin, Callable, Error as LoxTypeError, LoxType};
+use crate::lox::LoxType;
 use crate::tree_walk::parser::AstNode::{self, *};
 use crate::tree_walk::token::{Token, TokenType};
 
 use super::state::Environment;
-use super::{Error, Result};
+use super::{Builtin, Callable, Error, Result};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct Interpreter<'a> {
     // these enable redirecting output so that print can be tested
     output: Box<(dyn Write + 'a)>,
     err_output: Box<(dyn Write + 'a)>,
 
-    environment: Environment,
+    environment: Rc<RefCell<Environment>>,
+    globals: Rc<RefCell<Environment>>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -21,13 +25,17 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn new_with_output(out: Box<dyn Write + 'a>, err_out: Box<dyn Write + 'a>) -> Self {
-        let mut globals = Environment::new();
-        globals.put("time".into(), LoxType::Builtin(Builtin::Time));
+        let mut global_env = Environment::new();
+        global_env
+            .borrow_mut()
+            .put("time".into(), LoxType::Builtin(Builtin::Time));
+        let globals = Rc::new(RefCell::new(global_env));
 
         Self {
             output: out,
             err_output: err_out,
-            environment: globals,
+            environment: globals.clone(),
+            globals,
         }
     }
 
@@ -36,12 +44,14 @@ impl<'a> Interpreter<'a> {
             // NOTE: statements returning values does not make sense, but I
             // will need to rewrite test to change
             Prog(stmts) => self.evaluate_prog(&stmts),
-            DeclStmt { identifier, expr } => self.evaluate_var_decl_stmt(identifier, expr),
+            DeclStmt { identifier, expr } => {
+                self.evaluate_var_decl_stmt(identifier, expr.as_deref())
+            }
             IfStmt {
                 condition,
                 then_stmt,
                 else_stmt,
-            } => self.evaluate_if_stmt(condition, then_stmt, else_stmt),
+            } => self.evaluate_if_stmt(condition, then_stmt, else_stmt.as_deref()),
             FuncStmt {
                 name,
                 parameters,
@@ -77,7 +87,34 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_prog(&mut self, stmts: &Box<[AstNode]>) -> Result<LoxType> {
+    pub fn get_globals(&self) -> Rc<RefCell<Environment>> {
+        self.globals.clone()
+    }
+
+    pub fn evaluate_with_env(
+        &mut self,
+        exprs: &[AstNode],
+        env: Rc<RefCell<Environment>>,
+    ) -> Result<LoxType> {
+        let previous = self.environment.clone();
+        self.environment = env;
+
+        let mut last_expr_res = Ok(LoxType::Nil);
+        for expr in exprs.iter() {
+            last_expr_res = self.evaluate(expr);
+            if matches!(last_expr_res, Err(_)) {
+                break;
+            }
+        }
+
+        self.environment = previous;
+        match last_expr_res {
+            Err(e) => Err(e),
+            _ => Ok(LoxType::Nil),
+        }
+    }
+
+    fn evaluate_prog(&mut self, stmts: &[AstNode]) -> Result<LoxType> {
         for stmt in stmts.iter() {
             match self.evaluate(stmt) {
                 Err(err) => {
@@ -95,7 +132,7 @@ impl<'a> Interpreter<'a> {
     fn evaluate_var_decl_stmt(
         &mut self,
         identifier: &Token,
-        expr: &Option<Box<AstNode>>,
+        expr: Option<&AstNode>,
     ) -> Result<LoxType> {
         let name = match &identifier.token_type {
             TokenType::Identifier(name) => name,
@@ -106,7 +143,9 @@ impl<'a> Interpreter<'a> {
             Some(expr) => self.evaluate(expr)?,
             _ => LoxType::Nil,
         };
-        self.environment.put(name.clone(), expr_val.clone());
+        let env_ref = &mut *self.environment.borrow_mut();
+        let mut env = env_ref.as_ref().borrow_mut();
+        env.put(name.clone(), expr_val.clone());
         Ok(expr_val)
     }
 
@@ -114,7 +153,7 @@ impl<'a> Interpreter<'a> {
         &mut self,
         condition: &AstNode,
         then_stmt: &AstNode,
-        else_stmt: &Option<Box<AstNode>>,
+        else_stmt: Option<&AstNode>,
     ) -> Result<LoxType> {
         let cond = self.evaluate(condition)?;
         match self.is_truthy(cond) {
@@ -142,7 +181,7 @@ impl<'a> Interpreter<'a> {
         let params = parameters
             .iter()
             .map(|param| match &param.token_type {
-                TokenType::Identifier(name) => Ok(LoxType::String(name.clone())),
+                TokenType::Identifier(name) => Ok(name.to_string()),
                 _ => Err(Error::TokenIsNotAnIdenifier(param.clone())),
             })
             .collect::<Result<Vec<_>>>()?;
@@ -151,7 +190,9 @@ impl<'a> Interpreter<'a> {
             body: body.clone(),
         };
 
-        self.environment.put(name, func.clone());
+        let env_ref = &mut *self.environment.borrow_mut();
+        let mut env = env_ref.as_ref().borrow_mut();
+        env.put(name, func.clone());
         Ok(LoxType::Nil)
     }
 
@@ -169,22 +210,12 @@ impl<'a> Interpreter<'a> {
         Ok(LoxType::Nil)
     }
 
-    fn evaluate_block(&mut self, exprs: &Box<[AstNode]>) -> Result<LoxType> {
-        self.environment = Environment::new_sub_envoronment(&self.environment);
+    fn evaluate_block(&mut self, exprs: &[AstNode]) -> Result<LoxType> {
+        let env = Rc::new(RefCell::new(Environment::new_sub_envoronment(
+            self.environment.clone(),
+        )));
 
-        let mut last_expr_res = Ok(LoxType::Nil);
-        for expr in exprs.iter() {
-            last_expr_res = self.evaluate(expr);
-            if matches!(last_expr_res, Err(_)) {
-                break;
-            }
-        }
-
-        self.environment = self.environment.exit()?;
-        match last_expr_res {
-            Err(e) => Err(e),
-            _ => Ok(LoxType::Nil),
-        }
+        self.evaluate_with_env(exprs, env)
     }
 
     fn evaluate_assign_expr(&mut self, target: &AstNode, value: &AstNode) -> Result<LoxType> {
@@ -192,7 +223,10 @@ impl<'a> Interpreter<'a> {
         match target {
             Variable(name_token) => match &name_token.token_type {
                 TokenType::Identifier(name) => {
-                    self.environment.assign(&name, res.clone())?;
+                    let env_ref = &mut *self.environment.borrow_mut();
+                    let mut env = env_ref.as_ref().borrow_mut();
+
+                    env.assign(&name, res.clone())?;
                     Ok(res)
                 }
                 _ => Err(Error::TokenIsNotAnIdenifier(name_token.clone())),
@@ -351,7 +385,7 @@ impl<'a> Interpreter<'a> {
         &mut self,
         callee: &AstNode,
         paren: &Token,
-        argumnets: &Box<[AstNode]>,
+        argumnets: &[AstNode],
     ) -> Result<LoxType> {
         let callee_val = self.evaluate(callee)?;
 
@@ -360,23 +394,32 @@ impl<'a> Interpreter<'a> {
             .map(|arg| self.evaluate(arg))
             .collect::<Result<Vec<_>>>()?;
 
-        callee_val
-            .call(self, args.into())
-            .or_else(|err| Err(Self::convert_type_error(paren.line, err)))
+        match callee_val.call(self, args.into()) {
+            Err(Error::InvalidArity {
+                line: None,
+                expected,
+                received,
+            }) => Err(Error::InvalidArity {
+                // NOTE: I SHOULD HAVE USED usize FROM THE START!
+                line: Some(paren.line.try_into().unwrap()),
+                expected,
+                received,
+            }),
+            Err(Error::NotCallable { line: None }) => Err(Error::NotCallable {
+                line: Some(paren.line.try_into().unwrap()),
+            }),
+            ret => ret,
+        }
     }
 
     fn evaluate_variable_expr(&mut self, token: &Token) -> Result<LoxType> {
         match &token.token_type {
-            TokenType::Identifier(name) => self.environment.get(&name),
+            TokenType::Identifier(name) => {
+                let env_ref = &mut *self.environment.borrow_mut();
+                let mut env = env_ref.as_ref().borrow_mut();
+                env.get(&name)
+            }
             _ => unreachable!("Variable expresion should always be an identifier."),
-        }
-    }
-
-    fn convert_type_error(line: u32, err: LoxTypeError) -> Error {
-        match err {
-            LoxTypeError::NotCallable => Error::NotCallable { line, err },
-            LoxTypeError::InvalidArity { .. } => Error::InvalidArity { line, err },
-            err => unimplemented!("converions not implemented for {err} to interpreter error"),
         }
     }
 }
@@ -1055,10 +1098,11 @@ mod test {
         };
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(1.0)), res);
-        assert_eq!(
-            Some(LoxType::Number(1.0)),
-            interpreter.environment.state.get("test").cloned()
-        );
+        assert_eq!(Some(LoxType::Number(1.0)), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("test").cloned()
+        });
 
         let prog = AstNode::DeclStmt {
             identifier: Token {
@@ -1069,10 +1113,11 @@ mod test {
         };
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
-        assert_eq!(
-            Some(LoxType::Nil),
-            interpreter.environment.state.get("test").cloned()
-        );
+        assert_eq!(Some(LoxType::Nil), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("test").cloned()
+        });
     }
 
     #[test]
@@ -1087,10 +1132,11 @@ mod test {
             expr: None,
         };
         let _ = interpreter.evaluate(&prog);
-        assert_eq!(
-            Some(LoxType::Nil),
-            interpreter.environment.state.get("test").cloned()
-        );
+        assert_eq!(Some(LoxType::Nil), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("test").cloned()
+        });
 
         let prog = AstNode::Assign {
             target: Box::new(AstNode::Variable(Token {
@@ -1110,10 +1156,11 @@ mod test {
             value: Box::new(Literal(LiteralExpr::Number(1.0))),
         };
         let _ = interpreter.evaluate(&prog);
-        assert_eq!(
-            Some(LoxType::Number(1.0)),
-            interpreter.environment.state.get("test").cloned()
-        );
+        assert_eq!(Some(LoxType::Number(1.0)), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("test").cloned()
+        });
     }
 
     #[test]
@@ -1132,7 +1179,11 @@ mod test {
             })));
             let res = interpreter.evaluate(&prog);
             assert_eq!(Err(Error::UndifinedVariable("test".into())), res);
-            assert_eq!(None, interpreter.environment.state.get("test"));
+            assert_eq!(None, {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("test").cloned()
+            });
 
             let prog = AstNode::Assign {
                 target: Box::new(AstNode::Variable(Token {
@@ -1145,7 +1196,11 @@ mod test {
             };
             let res = interpreter.evaluate(&prog);
             assert_eq!(Err(Error::UndifinedVariable("test".into())), res);
-            assert_eq!(None, interpreter.environment.state.get("test").cloned());
+            assert_eq!(None, {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("test").cloned()
+            });
 
             let prog = AstNode::DeclStmt {
                 identifier: Token {
@@ -1158,10 +1213,11 @@ mod test {
             };
             let res = interpreter.evaluate(&prog);
             assert_eq!(Ok(LoxType::String("should be a string".into())), res);
-            assert_eq!(
-                Some(LoxType::String("should be a string".into())),
-                interpreter.environment.state.get("test").cloned()
-            );
+            assert_eq!(Some(LoxType::String("should be a string".into())), {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("test").cloned()
+            });
 
             let prog = AstNode::PrintStmt(Box::new(AstNode::Variable(Token {
                 token_type: TokenType::Identifier("test".into()),
@@ -1196,14 +1252,16 @@ mod test {
                 },
             ]));
             let _res = interpreter.evaluate(&prog);
-            assert_eq!(
-                Some(LoxType::Nil),
-                interpreter.environment.state.get("a").cloned()
-            );
-            assert_eq!(
-                Some(LoxType::Nil),
-                interpreter.environment.state.get("b").cloned()
-            );
+            assert_eq!(Some(LoxType::Nil), {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("a").cloned()
+            });
+            assert_eq!(Some(LoxType::Nil), {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("b").cloned()
+            });
 
             let prog = PrintStmt(Box::new(Assign {
                 target: Box::new(Variable(Token {
@@ -1219,14 +1277,16 @@ mod test {
                 }),
             }));
             let _res = interpreter.evaluate(&prog);
-            assert_eq!(
-                Some(LoxType::Number(1.0)),
-                interpreter.environment.state.get("a").cloned()
-            );
-            assert_eq!(
-                Some(LoxType::Number(1.0)),
-                interpreter.environment.state.get("b").cloned()
-            );
+            assert_eq!(Some(LoxType::Number(1.0)), {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("a").cloned()
+            });
+            assert_eq!(Some(LoxType::Number(1.0)), {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("b").cloned()
+            });
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
         assert_eq!("1\n".to_string(), output);
@@ -1249,7 +1309,11 @@ mod test {
         }]));
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
-        assert_eq!(None, interpreter.environment.state.get("a").cloned());
+        assert_eq!(None, {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
 
         let prog = AstNode::DeclStmt {
             identifier: Token {
@@ -1260,10 +1324,11 @@ mod test {
         };
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Number(1.0)), res);
-        assert_eq!(
-            Some(LoxType::Number(1.0)),
-            interpreter.environment.state.get("a").cloned()
-        );
+        assert_eq!(Some(LoxType::Number(1.0)), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
 
         let prog = AstNode::Block(Box::new([AstNode::Assign {
             target: Box::new(AstNode::Variable(Token {
@@ -1274,10 +1339,11 @@ mod test {
         }]));
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
-        assert_eq!(
-            Some(LoxType::Number(2.0)),
-            interpreter.environment.state.get("a").cloned()
-        );
+        assert_eq!(Some(LoxType::Number(2.0)), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
 
         let prog = AstNode::Block(Box::new([
             AstNode::Assign {
@@ -1297,10 +1363,11 @@ mod test {
         ]));
         let res = interpreter.evaluate(&prog);
         assert_eq!(Err(Error::UndifinedVariable("b".into())), res);
-        assert_eq!(
-            Some(LoxType::Number(2.0)),
-            interpreter.environment.state.get("a").cloned()
-        );
+        assert_eq!(Some(LoxType::Number(2.0)), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
     }
 
     #[test]
@@ -1316,10 +1383,11 @@ mod test {
         }]));
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
-        assert_eq!(
-            Some(LoxType::Nil),
-            interpreter.environment.state.get("a".into()).cloned()
-        );
+        assert_eq!(Some(LoxType::Nil), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
 
         let prog = AstNode::Prog(Box::new([AstNode::IfStmt {
             condition: Box::new(AstNode::Literal(LiteralExpr::True)),
@@ -1340,10 +1408,11 @@ mod test {
         }]));
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
-        assert_eq!(
-            Some(LoxType::Number(1.0)),
-            interpreter.environment.state.get("a".into()).cloned()
-        );
+        assert_eq!(Some(LoxType::Number(1.0)), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
 
         let prog = AstNode::Prog(Box::new([AstNode::IfStmt {
             condition: Box::new(AstNode::Literal(LiteralExpr::False)),
@@ -1364,10 +1433,11 @@ mod test {
         }]));
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
-        assert_eq!(
-            Some(LoxType::Number(2.0)),
-            interpreter.environment.state.get("a".into()).cloned()
-        );
+        assert_eq!(Some(LoxType::Number(2.0)), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
 
         let prog = AstNode::Prog(Box::new([
             AstNode::Assign {
@@ -1391,10 +1461,11 @@ mod test {
         ]));
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
-        assert_eq!(
-            Some(LoxType::Nil),
-            interpreter.environment.state.get("a".into()).cloned()
-        );
+        assert_eq!(Some(LoxType::Nil), {
+            let env_ref = &mut *interpreter.environment.borrow_mut();
+            let env = env_ref.as_ref().borrow_mut();
+            env.state.get("a").cloned()
+        });
     }
 
     #[test]
@@ -1456,10 +1527,11 @@ mod test {
                 expr: Some(Box::new(Literal(LiteralExpr::Number(0.0)))),
             };
             let _res = interpreter.evaluate(&prog);
-            assert_eq!(
-                Some(LoxType::Number(0.0)),
-                interpreter.environment.state.get("i".into()).cloned()
-            );
+            assert_eq!(Some(LoxType::Number(0.0)), {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("i").cloned()
+            });
 
             let prog = WhileStmt {
                 condition: Box::new(BinaryExpr {
@@ -1498,10 +1570,11 @@ mod test {
                 ]))),
             };
             let _res = interpreter.evaluate(&prog);
-            assert_eq!(
-                Some(LoxType::Number(4.0)),
-                interpreter.environment.state.get("i".into()).cloned()
-            );
+            assert_eq!(Some(LoxType::Number(4.0)), {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("i").cloned()
+            });
         }
         let output = String::from_utf8(out_buf.0.borrow().to_vec()).expect("should be string");
         assert_eq!("0\n1\n2\n3\n".to_string(), output);
@@ -1547,13 +1620,7 @@ mod test {
             arguments: Box::new([]),
         }));
         let res = interpreter.evaluate(&prog);
-        assert_eq!(
-            Err(Error::NotCallable {
-                line: 0,
-                err: LoxTypeError::NotCallable
-            }),
-            res
-        );
+        assert_eq!(Err(Error::NotCallable { line: Some(0) }), res);
 
         let prog = ExprStmt(Box::new(CallExpr {
             calle: Box::new(Variable(Token {
@@ -1592,11 +1659,15 @@ mod test {
         let res = interpreter.evaluate(&prog);
         assert_eq!(Ok(LoxType::Nil), res);
         assert_eq!(
-            Ok(LoxType::Function {
-                parameters: Box::new([LoxType::String("x".into())]),
+            Some(LoxType::Function {
+                parameters: Box::new(["x".into()]),
                 body: Block(Box::new([])),
             }),
-            interpreter.environment.get("f".into())
+            {
+                let env_ref = &mut *interpreter.environment.borrow_mut();
+                let env = env_ref.as_ref().borrow_mut();
+                env.state.get("f").cloned()
+            }
         );
 
         let prog = FuncStmt {

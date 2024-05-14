@@ -1,5 +1,7 @@
-use super::{Error, LoxType, Result};
-use crate::tree_walk::interpreter::Interpreter;
+use super::{Error, Result};
+use crate::lox::LoxType;
+use crate::tree_walk::interpreter::{Environment, Interpreter};
+use std::{cell::RefCell, iter::zip, rc::Rc};
 
 pub trait Callable {
     fn call(&self, interpreter: &mut Interpreter, arguments: Box<[LoxType]>) -> Result<LoxType>;
@@ -19,15 +21,20 @@ impl Callable for LoxType {
             Self::Function { parameters, body } => {
                 if arguments.len() != self.arity() {
                     return Err(Error::InvalidArity {
+                        line: None,
                         expected: self.arity(),
                         received: arguments.len(),
-                    });
+                    })?;
                 }
 
-                todo!("run fuction")
+                let mut env = Environment::new_sub_envoronment(interpreter.get_globals());
+                zip(parameters.iter(), arguments.iter())
+                    .for_each(|(param, arg)| env.put(param.clone().into_boxed_str(), arg.clone()));
+
+                Ok(interpreter.evaluate_with_env(&[body.clone()], Rc::new(RefCell::new(env)))?)
             }
             Self::Builtin(builtin) => builtin.call(interpreter, arguments),
-            _ => Err(Error::NotCallable),
+            _ => Err(Error::NotCallable { line: None }),
         }
     }
 }
